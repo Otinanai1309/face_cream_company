@@ -9,6 +9,9 @@ from django.urls import reverse_lazy
 from django.forms import inlineformset_factory
 
 from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
 from .serializers import SupplierSerializer, RawMaterialSerializer, PurchaseOrderSerializer, PurchaseOrderLineSerializer
 
 
@@ -20,7 +23,7 @@ class RawMaterialListView(ListView):
     model = RawMaterial
     template_name = 'raw_materials/rawmaterial_list.html'
     context_object_name = 'rawmaterials'
-
+    
 class RawMaterialDetailView(DetailView):
     model = RawMaterial
     template_name = 'raw_materials/rawmaterial_detail.html'
@@ -152,6 +155,18 @@ class SupplierViewSet(viewsets.ModelViewSet):
 class RawMaterialViewSet(viewsets.ModelViewSet):
     queryset = RawMaterial.objects.all()
     serializer_class = RawMaterialSerializer
+
+    @action(detail=False, methods=['get'])
+    def list_raw_materials(self, request):
+        raw_materials = self.get_queryset()
+        serializer = self.get_serializer(raw_materials, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def detail_raw_material(self, request, pk=None):
+        raw_material = self.get_object()
+        serializer = self.get_serializer(raw_material)
+        return Response(serializer.data)
 
 class PurchaseOrderViewSet(viewsets.ModelViewSet):
     queryset = PurchaseOrder.objects.all()

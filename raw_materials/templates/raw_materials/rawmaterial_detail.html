@@ -8,6 +8,12 @@
 <p>VAT Category: {{ rawmaterial.vat_category }}</p>
 <p>Stock: {{ rawmaterial.stock }}</p>
 <p>Barcode: {{ rawmaterial.barcode }}</p>
+<p>Suppliers:</p>
+<ul>
+    {% for supplier in rawmaterial.suppliers.all %}
+        <li>{{ supplier.name }}</li>
+    {% endfor %}
+</ul>
 <a href="{% url 'rawmaterial_update' rawmaterial.pk %}">Edit</a>
 <a href="{% url 'rawmaterial_delete' rawmaterial.pk %}">Delete</a>
 {% endblock %}
