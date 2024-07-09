@@ -1,0 +1,11 @@
+<!-- raw_materials/templates/raw_materials/rawmaterial_form.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{% if rawmaterial %}Edit{% else %}Add{% endif %} Raw Material</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

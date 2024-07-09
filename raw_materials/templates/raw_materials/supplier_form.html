@@ -1,0 +1,11 @@
+<!-- raw_materials/templates/raw_materials/supplier_form.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{% if supplier %}Edit{% else %}Add{% endif %} Supplier</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

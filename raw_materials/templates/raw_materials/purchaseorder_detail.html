@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Purchase Order Details</h2>
+<p><strong>Code:</strong> {{ purchaseorder.code }}</p>
+<p><strong>Supplier:</strong> {{ purchaseorder.supplier }}</p>
+<p><strong>Date:</strong> {{ purchaseorder.date }}</p>
+<p><strong>Estimated Delivery Date:</strong> {{ purchaseorder.estimated_delivery_date }}</p>
+<p><strong>State:</strong> {{ purchaseorder.get_state_display }}</p>
+
+<h3>Order Lines</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Raw Material</th>
+            <th>Quantity</th>
+            <th>Price</th>
+            <th>Cost</th>
+            <th>VAT</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for line in purchaseorder.purchaseorderline_set.all %}
+        <tr>
+            <td>{{ line.raw_material }}</td>
+            <td>{{ line.quantity }}</td>
+            <td>{{ line.price }}</td>
+            <td>{{ line.cost }}</td>
+            <td>{{ line.vat }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

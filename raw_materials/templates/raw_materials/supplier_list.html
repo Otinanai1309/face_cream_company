@@ -1,0 +1,17 @@
+<!-- raw_materials/templates/raw_materials/supplier_list.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Suppliers</h1>
+<ul>
+    {% for supplier in suppliers %}
+    <li><a href="{% url 'supplier_detail' supplier.pk %}">{{ supplier.name }}</a></li>
+    {% endfor %}
+</ul>
+<a href="{% url 'supplier_create' %}">Add Supplier</a>
+{% endblock %}
+
+
+
+
+

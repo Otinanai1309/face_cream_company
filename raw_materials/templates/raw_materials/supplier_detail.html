@@ -1,0 +1,12 @@
+<!-- supplier_detail.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>{{ supplier.name }}</h1>
+<p>{{ supplier.address }}</p>
+<p>{{ supplier.phone }}</p>
+<p>{{ supplier.mobile }}</p>
+<p>{{ supplier.email }}</p>
+<a href="{% url 'supplier_update' supplier.pk %}" class="btn btn-primary">Edit</a>
+<a href="{% url 'supplier_delete' supplier.pk %}" class="btn btn-danger">Delete</a>
+{% endblock %}

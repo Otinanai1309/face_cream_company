@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Purchase Orders</h2>
+<a href="{% url 'purchaseorder_create' %}" class="btn btn-primary">Add New</a>
+<ul>
+    {% for purchaseorder in purchaseorders %}
+    <li><a href="{% url 'purchaseorder_detail' purchaseorder.pk %}">{{ purchaseorder.code }} - {{ purchaseorder.supplier }}</a></li>
+    {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,12 @@
+<!-- raw_materials/templates/raw_materials/rawmaterial_confirm_delete.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Delete Raw Material</h1>
+<p>Are you sure you want to delete {{ rawmaterial.name }}?</p>
+<form method="post">
+    {% csrf_token %}
+    <button type="submit">Yes, delete</button>
+    <a href="{% url 'rawmaterial_detail' rawmaterial.pk %}">Cancel</a>
+</form>
+{% endblock %}

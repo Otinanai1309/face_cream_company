@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{% if object %}Update{% else %}Create{% endif %} Purchase Order</h2>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <h3>Order Lines</h3>
+    {{ lines.management_form }}
+    {% for line_form in lines.forms %}
+        <div class="order-line-form">
+            {{ line_form.as_p }}
+            <button type="button" class="edit-line">Edit</button>
+            <button type="button" class="delete-line">Delete</button>
+        </div>
+    {% endfor %}
+    <button type="button" id="add-line">Add Line</button>
+    <button type="submit">Save</button>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const addButton = document.getElementById('add-line');
+    const totalForms = document.getElementById('id_form-TOTAL_FORMS');
+
+    addButton.addEventListener('click', addForm);
+
+    function addForm() {
+        const formCount = parseInt(totalForms.value, 10);
+        const newForm = document.querySelector('.order-line-form').cloneNode(true);
+        newForm.innerHTML = newForm.innerHTML.replace(/form-(\d)-/g, `form-${formCount}-`);
+        document.querySelector('.order-line-form').parentNode.appendChild(newForm);
+        totalForms.value = formCount + 1;
+    }
+
+    const editButtons = document.querySelectorAll('.edit-line');
+    const deleteButtons = document.querySelectorAll('.delete-line');
+
+    editButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const form = button.closest('.order-line-form');
+            // Add edit functionality here
+        });
+    });
+
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const form = button.closest('.order-line-form');
+            form.remove();
+            // Update the management form to reflect the deletion
+            const totalForms = document.getElementById('id_form-TOTAL_FORMS');
+            totalForms.value = parseInt(totalForms.value, 10) - 1;
+        });
+    });
+});
+</script>
+{% endblock %}

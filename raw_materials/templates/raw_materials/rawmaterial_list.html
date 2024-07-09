@@ -1,0 +1,16 @@
+<!-- raw_materials/templates/raw_materials/rawmaterial_list.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Raw Materials</h1>
+<ul>
+    {% for rawmaterial in rawmaterials %}
+    <li><a href="{% url 'rawmaterial_detail' rawmaterial.pk %}">{{ rawmaterial.name }}</a></li>
+    {% endfor %}
+</ul>
+<a href="{% url 'rawmaterial_create' %}">Add Raw Material</a>
+{% endblock %}
+
+
+
+
