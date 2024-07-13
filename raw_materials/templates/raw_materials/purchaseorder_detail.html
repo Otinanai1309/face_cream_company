@@ -31,4 +31,7 @@
         {% endfor %}
     </tbody>
 </table>
+
+<a href="{% url 'purchaseorder_update' purchaseorder.pk %}" class="btn btn-primary">Edit</a>
+<a href="{% url 'purchaseorder_delete' purchaseorder.pk %}" class="btn btn-danger">Delete</a>
 {% endblock %}

@@ -1,19 +1,15 @@
+# views.py
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
-
 from django.forms import inlineformset_factory
 from .models import PurchaseOrder, PurchaseOrderLine
 from .models import Supplier, RawMaterial
 from .forms import PurchaseOrderForm, PurchaseOrderLineForm
 from django.urls import reverse_lazy
-from django.forms import inlineformset_factory
-
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-
 from .serializers import SupplierSerializer, RawMaterialSerializer, PurchaseOrderSerializer, PurchaseOrderLineSerializer
-
 
 def home(request):
     return render(request, 'home.html')
@@ -99,9 +95,9 @@ class PurchaseOrderCreateView(CreateView):
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         if self.request.POST:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST)
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST, form_kwargs={'supplier': self.object.supplier if self.object else None})
         else:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)()
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(form_kwargs={'supplier': None})
         return data
 
     def form_valid(self, form):
@@ -114,8 +110,8 @@ class PurchaseOrderCreateView(CreateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse_lazy('purchaseorder_detail', kwargs={'pk': self.object.pk})
-
+        return reverse_lazy('purchaseorder_list')
+    
 class PurchaseOrderUpdateView(UpdateView):
     model = PurchaseOrder
     form_class = PurchaseOrderForm
@@ -124,9 +120,9 @@ class PurchaseOrderUpdateView(UpdateView):
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         if self.request.POST:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST, instance=self.object)
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST, instance=self.object, form_kwargs={'supplier': self.object.supplier})
         else:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(instance=self.object)
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(instance=self.object, form_kwargs={'supplier': self.object.supplier})
         return data
 
     def form_valid(self, form):
@@ -141,8 +137,6 @@ class PurchaseOrderUpdateView(UpdateView):
     def get_success_url(self):
         return reverse_lazy('purchaseorder_detail', kwargs={'pk': self.object.pk})
     
-    
-# Using REST framework
 class PurchaseOrderDeleteView(DeleteView):
     model = PurchaseOrder
     template_name = 'raw_materials/purchaseorder_confirm_delete.html'
