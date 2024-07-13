@@ -51,7 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const addButton = document.getElementById('add-line');
     const totalForms = document.getElementById('id_form-TOTAL_FORMS');
 
-    addButton.addEventListener('click', addForm);
+    if (addButton && totalForms) {
+        addButton.addEventListener('click', addForm);
+    }
 
     function addForm() {
         const formCount = parseInt(totalForms.value, 10);
