@@ -2,7 +2,7 @@
 
 {% block content %}
 <h2>{% if object %}Update{% else %}Create{% endif %} Purchase Order</h2>
-<form method="post">
+<form method="post" action="{% url 'create_purchase_order' %}">
     {% csrf_token %}
     <div class="form-section">
         {{ form.as_p }}
@@ -21,7 +21,7 @@
                     <th>Actions</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="order-lines-body">
                 {% for line_form in lines.forms %}
                     <tr class="order-line-form">
                         <td>{{ line_form.raw_material }}</td>
@@ -46,8 +46,9 @@
     <button type="submit">Save</button>
 </form>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+$(document).ready(function() {
     const addButton = document.getElementById('add-line');
     const totalForms = document.getElementById('id_form-TOTAL_FORMS');
 
@@ -59,54 +60,148 @@ document.addEventListener('DOMContentLoaded', function() {
         const formCount = parseInt(totalForms.value, 10);
         const newForm = document.querySelector('.order-line-form').cloneNode(true);
         newForm.innerHTML = newForm.innerHTML.replace(/form-(\d)-/g, `form-${formCount}-`);
-        document.querySelector('.order-lines tbody').appendChild(newForm);
+        document.querySelector('#order-lines-body').appendChild(newForm);
         totalForms.value = formCount + 1;
+        
+        // Add event listener to new delete button
+        newForm.querySelector('.delete-line').addEventListener('click', function() {
+            deleteLine(this);
+        });
+        
+        // Initialize the new form row
+        initializeFormRow(newForm);
     }
 
-    const deleteButtons = document.querySelectorAll('.delete-line');
+    function deleteLine(button) {
+        const form = button.closest('.order-line-form');
+        form.remove();
+        totalForms.value = parseInt(totalForms.value, 10) - 1;
+        calculateTotals();
+    }
 
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const form = button.closest('.order-line-form');
-            form.remove();
-            // Update the management form to reflect the deletion
-            const totalForms = document.getElementById('id_form-TOTAL_FORMS');
-            totalForms.value = parseInt(totalForms.value, 10) - 1;
+    function initializeFormRow(row) {
+        const rawMaterialSelect = row.querySelector('select[name$="-raw_material"]');
+        const priceInput = row.querySelector('input[name$="-price"]');
+        const quantityInput = row.querySelector('input[name$="-quantity"]');
+
+        rawMaterialSelect.addEventListener('change', function() {
+            updatePrice(this);
+        });
+
+        priceInput.addEventListener('change', function() {
+            handlePriceChange(this);
+        });
+
+        quantityInput.addEventListener('input', calculateTotals);
+    }
+
+    $('#id_supplier').change(function() {
+        var supplierId = $(this).val();
+        console.log("Supplier changed, ID:", supplierId);
+        $.ajax({
+            url: "{% url 'get_raw_materials' %}",
+            data: {
+                'supplier_id': supplierId
+            },
+            success: function(data) {
+                console.log("Received raw materials:", data);
+                $('.order-line-form select[name$="-raw_material"]').each(function() {
+                    var select = $(this);
+                    select.empty();
+                    $.each(data, function(index, item) {
+                        select.append($('<option>', {
+                            value: item.id,
+                            text: item.name
+                        }));
+                    });
+                    updatePrice(select[0]);
+                });
+            }
         });
     });
 
-    // Calculate totals
+    function updatePrice(rawMaterialSelect) {
+        var rawMaterialId = $(rawMaterialSelect).val();
+        if (rawMaterialId) {
+            $.ajax({
+                url: "{% url 'get_raw_material_price' %}",
+                data: {
+                    'raw_material_id': rawMaterialId
+                },
+                success: function(data) {
+                    var priceInput = $(rawMaterialSelect).closest('.order-line-form').find('input[name$="-price"]');
+                    priceInput.val(data.price);
+                    priceInput.data('original-price', data.price);
+                    calculateTotals();
+                }
+            });
+        }
+    }
+
+    function handlePriceChange(priceInput) {
+        var newPrice = $(priceInput).val();
+        var originalPrice = $(priceInput).data('original-price');
+        if (newPrice != originalPrice) {
+            if (confirm('The price has changed. Do you want to update the price in the database?')) {
+                var rawMaterialId = $(priceInput).closest('.order-line-form').find('select[name$="-raw_material"]').val();
+                $.ajax({
+                    url: "{% url 'update_raw_material_price' %}",
+                    method: 'POST',
+                    data: {
+                        'raw_material_id': rawMaterialId,
+                        'new_price': newPrice,
+                        'csrfmiddlewaretoken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('Price updated successfully in the database.');
+                            $(priceInput).data('original-price', newPrice);
+                        } else {
+                            alert('Failed to update price in the database.');
+                            $(priceInput).val(originalPrice);
+                        }
+                        calculateTotals();
+                    }
+                });
+            } else {
+                $(priceInput).val(originalPrice);
+                calculateTotals();
+            }
+        }
+    }
+
     function calculateTotals() {
-        console.log("Starting calculateTotals");
         let totalCost = 0;
         let totalVAT = 0;
-        document.querySelectorAll('.order-line-form').forEach(form => {
-            const quantityInput = form.querySelector('input[name^="form-"][name$="-quantity"]');
-            const priceInput = form.querySelector('input[name^="form-"][name$="-price"]');
+        $('.order-line-form').each(function() {
+            const quantityInput = $(this).find('input[name$="-quantity"]');
+            const priceInput = $(this).find('input[name$="-price"]');
             
-            const quantity = quantityInput ? parseFloat(quantityInput.value) || 0 : 0;
-            const price = priceInput ? parseFloat(priceInput.value) || 0 : 0;
-            
-            console.log(`Quantity: ${quantity}, Price: ${price}`);
+            const quantity = parseFloat(quantityInput.val()) || 0;
+            const price = parseFloat(priceInput.val()) || 0;
             
             const cost = quantity * price;
             const vatRate = 0.24; // Assuming a VAT rate of 24%
             const vat = cost * vatRate;
             
-            console.log(`Cost: ${cost}, VAT: ${vat}`);
-            
-            form.querySelector('.cost').textContent = cost.toFixed(2);
-            form.querySelector('.vat').textContent = vat.toFixed(2);
+            $(this).find('.cost').text(cost.toFixed(2));
+            $(this).find('.vat').text(vat.toFixed(2));
             
             totalCost += cost;
             totalVAT += vat;
         });
-        console.log(`Total Cost: ${totalCost}, Total VAT: ${totalVAT}`);
-        document.getElementById('total-cost').textContent = totalCost.toFixed(2);
-        document.getElementById('total-vat').textContent = totalVAT.toFixed(2);
+        $('#total-cost').text(totalCost.toFixed(2));
+        $('#total-vat').text(totalVAT.toFixed(2));
     }
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('input', calculateTotals);
+
+    // Initialize existing form rows
+    $('.order-line-form').each(function() {
+        initializeFormRow(this);
+    });
+
+    // Initialize delete buttons
+    $('.delete-line').click(function() {
+        deleteLine(this);
     });
 
     calculateTotals();

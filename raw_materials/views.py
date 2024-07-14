@@ -10,9 +10,51 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .serializers import SupplierSerializer, RawMaterialSerializer, PurchaseOrderSerializer, PurchaseOrderLineSerializer
+from django.forms import formset_factory
+
+from django.http import JsonResponse
+
+def get_raw_materials(request):
+    supplier_id = request.GET.get('supplier_id')
+    print(f"Fetching raw materials for supplier ID: {supplier_id}")
+    raw_materials = RawMaterial.objects.filter(suppliers__id=supplier_id).values('id', 'name')
+    return JsonResponse(list(raw_materials), safe=False)
+
+def get_raw_material_price(request):
+    raw_material_id = request.GET.get('raw_material_id')
+    raw_material = RawMaterial.objects.get(id=raw_material_id)
+    return JsonResponse({'price': str(raw_material.price)})
+def update_raw_material_price(request):
+    if request.method == 'POST':
+        raw_material_id = request.POST.get('raw_material_id')
+        new_price = request.POST.get('new_price')
+        raw_material = RawMaterial.objects.get(id=raw_material_id)
+        raw_material.price = new_price
+        raw_material.save()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False})
 
 def home(request):
     return render(request, 'home.html')
+
+
+def create_purchase_order(request):
+    PurchaseOrderLineFormSet = formset_factory(PurchaseOrderLineForm, extra=1)
+    if request.method == 'POST':
+        form = PurchaseOrderForm(request.POST)
+        formset = PurchaseOrderLineFormSet(request.POST)
+        if form.is_valid() and formset.is_valid():
+            purchase_order = form.save()
+            for line_form in formset:
+                if line_form.cleaned_data:
+                    line = line_form.save(commit=False)
+                    line.purchase_order = purchase_order
+                    line.save()
+            return redirect('purchase_order_detail', pk=purchase_order.pk)
+    else:
+        form = PurchaseOrderForm()
+        formset = PurchaseOrderLineFormSet()
+    return render(request, 'raw_materials/purchaseorder_form.html', {'form': form, 'lines': formset})
 
 # RawMaterial Views
 class RawMaterialListView(ListView):
@@ -95,9 +137,9 @@ class PurchaseOrderCreateView(CreateView):
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         if self.request.POST:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST, form_kwargs={'supplier': self.object.supplier if self.object else None})
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST)
         else:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(form_kwargs={'supplier': None})
+            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)()
         return data
 
     def form_valid(self, form):
@@ -135,7 +177,8 @@ class PurchaseOrderUpdateView(UpdateView):
         return super().form_valid(form)
 
     def get_success_url(self):
-        return reverse_lazy('purchaseorder_detail', kwargs={'pk': self.object.pk})
+        return reverse_lazy('purchaseorder_list')
+        #return reverse_lazy('purchaseorder_detail', kwargs={'pk': self.object.pk})
     
 class PurchaseOrderDeleteView(DeleteView):
     model = PurchaseOrder
