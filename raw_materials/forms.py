@@ -20,4 +20,4 @@ class PurchaseOrderLineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['raw_material'].queryset = RawMaterial.objects.none()
-        self.fields['price'].widget.attrs['readonly'] = True
+        self.fields['price'].widget.attrs['readonly'] = False

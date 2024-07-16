@@ -20,7 +20,9 @@
         </tr>
     </thead>
     <tbody>
+        <p>Debug: Number of order lines: {{ purchaseorder.purchaseorderline_set.all|length }}</p>
         {% for line in purchaseorder.purchaseorderline_set.all %}
+        <p>Debug: Line {{ forloop.counter }} - Raw Material: {{ line.raw_material }}, Quantity: {{ line.quantity }}, Price: {{ line.price }}, Cost: {{ line.cost }}, VAT: {{ line.vat }}</p>
         <tr>
             <td>{{ line.raw_material }}</td>
             <td>{{ line.quantity }}</td>
@@ -30,6 +32,14 @@
         </tr>
         {% endfor %}
     </tbody>
+    <tfoot>
+        <tr>
+            <td colspan="3"><strong>Totals:</strong></td>
+            <td><strong>{{ total_cost }}</strong></td>
+            <td><strong>{{ total_vat }}</strong></td>
+        </tr>
+    </tfoot>
+    
 </table>
 
 <a href="{% url 'purchaseorder_update' purchaseorder.pk %}" class="btn btn-primary">Edit</a>

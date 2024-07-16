@@ -53,6 +53,18 @@ class PurchaseOrderLine(models.Model):
         vat_rate = Decimal(self.raw_material.vat_category.split()[0]) / 100
         self.vat = self.cost * vat_rate
         super().save(*args, **kwargs)
+        
+    @property
+    def cost(self):
+        cost = self.quantity * self.price
+        print(f"Calculating cost for line {self.id}: {self.quantity} * {self.price} = {cost}")
+        return cost
 
+    @property
+    def vat(self):
+        vat_rate = Decimal(self.raw_material.vat_category) / 100
+        vat = self.cost * vat_rate
+        print(f"Calculating VAT for line {self.id}: {self.cost} * {vat_rate} = {vat}")
+        return vat
     def __str__(self):
         return f"Line for {self.raw_material.name} in order {self.purchase_order.code}"
