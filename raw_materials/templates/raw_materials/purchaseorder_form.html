@@ -111,6 +111,10 @@ function initializeFormRow(row) {
     });
 
     quantityInput.addEventListener('input', calculateTotals);
+
+    // Call updatePrice and calculateTotals to ensure VAT and costs are calculated
+    updatePrice(rawMaterialSelect);
+    calculateTotals();
 }
 
 function updatePrice(rawMaterialSelect) {

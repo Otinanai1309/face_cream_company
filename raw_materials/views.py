@@ -14,11 +14,13 @@ from django.forms import formset_factory
 
 from django.http import JsonResponse
 
+from decimal import Decimal
+
 def get_raw_materials(request):
     supplier_id = request.GET.get('supplier_id')
-    print(f"Fetching raw materials for supplier ID: {supplier_id}")
-    raw_materials = RawMaterial.objects.filter(suppliers__id=supplier_id).values('id', 'name')
-    return JsonResponse(list(raw_materials), safe=False)
+    raw_materials = RawMaterial.objects.filter(suppliers__id=supplier_id).values('id', 'name', 'vat_category')
+    raw_materials = [{'id': rm['id'], 'name': rm['name'], 'vat_rate': Decimal(rm['vat_category']) / 100} for rm in raw_materials]
+    return JsonResponse(raw_materials, safe=False)
 
 def get_raw_material_price(request):
     raw_material_id = request.GET.get('raw_material_id')
@@ -33,6 +35,17 @@ def update_raw_material_price(request):
         raw_material.save()
         return JsonResponse({'success': True})
     return JsonResponse({'success': False})
+
+def get_raw_material_vat_rate(request):
+    raw_material_id = request.GET.get('raw_material_id')
+    if raw_material_id:
+        try:
+            raw_material = RawMaterial.objects.get(id=raw_material_id)
+            return JsonResponse({'vat_rate': str(raw_material.get_vat_rate())})
+        except RawMaterial.DoesNotExist:
+            return JsonResponse({'error': 'Raw material not found'}, status=404)
+    return JsonResponse({'error': 'No raw material ID provided'}, status=400)
+
 
 def home(request):
     return render(request, 'home.html')

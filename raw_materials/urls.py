@@ -9,7 +9,7 @@ from .views import (
 
 from rest_framework.routers import DefaultRouter
 from .views import SupplierViewSet, RawMaterialViewSet, PurchaseOrderViewSet, PurchaseOrderLineViewSet
-from .views import get_raw_materials, update_raw_material_price, get_raw_material_price
+from .views import get_raw_materials, update_raw_material_price, get_raw_material_price, get_raw_material_vat_rate
 from django.views.generic import TemplateView
 from django.contrib import admin
 
@@ -32,6 +32,8 @@ urlpatterns = [
     path('get-raw-materials/', get_raw_materials, name='get_raw_materials'),
     path('update-raw-material-price/', update_raw_material_price, name='update_raw_material_price'),
     path('get-raw-material-price/', get_raw_material_price, name='get_raw_material_price'),
+    path('api/get-raw-material-vat-rate/', get_raw_material_vat_rate, name='get_raw_material_vat_rate'),
+
     
     path('suppliers/', SupplierListView.as_view(), name='supplier_list'),
     path('suppliers/new/', SupplierCreateView.as_view(), name='supplier_create'),
