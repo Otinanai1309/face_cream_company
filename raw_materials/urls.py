@@ -48,7 +48,8 @@ urlpatterns = [
     path('rawmaterials/<int:pk>/delete/', RawMaterialDeleteView.as_view(), name='rawmaterial_delete'),
 
     path('purchaseorders/', PurchaseOrderListView.as_view(), name='purchaseorder_list'),
-    path('purchaseorders/new/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
+    path('purchaseorders/create/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
+    #path('purchaseorders/new/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
     path('purchaseorders/<int:pk>/', PurchaseOrderDetailView.as_view(), name='purchaseorder_detail'),
     path('purchaseorders/<int:pk>/update/', PurchaseOrderUpdateView.as_view(), name='purchaseorder_update'),
     path('purchaseorders/<int:pk>/delete/', PurchaseOrderDeleteView.as_view(), name='purchaseorder_delete'),

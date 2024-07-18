@@ -21,8 +21,7 @@
     </thead>
     <tbody>
         <p>Debug: Number of order lines: {{ purchaseorder.purchaseorderline_set.all|length }}</p>
-        {% for line in purchaseorder.purchaseorderline_set.all %}
-        <p>Debug: Line {{ forloop.counter }} - Raw Material: {{ line.raw_material }}, Quantity: {{ line.quantity }}, Price: {{ line.price }}, Cost: {{ line.cost }}, VAT: {{ line.vat }}</p>
+        {% for line in lines %}
         <tr>
             <td>{{ line.raw_material }}</td>
             <td>{{ line.quantity }}</td>

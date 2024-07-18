@@ -1,8 +1,9 @@
+<!-- purchaseorder_form.html -->
 {% extends "base.html" %}
 
 {% block content %}
 <h2>{% if object %}Update{% else %}Create{% endif %} Purchase Order</h2>
-<form method="post" action="{% url 'create_purchase_order' %}">
+<form method="post" action="{% url 'purchaseorder_create' %}">
     {% csrf_token %}
     <div class="form-section">
         {{ form.as_p }}
@@ -22,7 +23,7 @@
                 </tr>
             </thead>
             <tbody id="order-lines-body">
-                {% for line_form in lines.forms %}
+                {% for line_form in lines %}
                     <tr class="order-line-form">
                         <td>{{ line_form.raw_material }}</td>
                         <td>{{ line_form.quantity }}</td>
@@ -48,221 +49,26 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-let totalForms;
-
-let formCount = $('.order-line-form').length;
-
-function addForm() {
-    console.log("Add Form function called");
-    console.log("Current form count:", formCount);
-    const newForm = $('.order-line-form:first').clone(true);
-    newForm.find('input, select').val('');
-    newForm.find('input, select').each(function() {
-        let name = $(this).attr('name').replace('-0-', '-' + formCount + '-');
-        let id = 'id_' + name;
-        $(this).attr({'name': name, 'id': id});
-    });
-    $('#order-lines-body').append(newForm);
-    formCount++;
-    console.log("New form count:", formCount);
-
-    initializeFormRow(newForm[0]);
-    updateRawMaterialOptions(newForm.find('select[name$="-raw_material"]'));
-
-    console.log("New form initialized and raw material options updated");
-}
-
-function updateRawMaterialOptions(select) {
-    const supplierId = $('#id_supplier').val();
-    if (supplierId) {
-        $.ajax({
-            url: "{% url 'get_raw_materials' %}",
-            data: { 'supplier_id': supplierId },
-            success: function(data) {
-                $(select).empty();
-                $.each(data, function(index, item) {
-                    $(select).append($('<option></option>').attr('value', item.id).text(item.name));
-                });
-                updatePrice(select);
-            }
-        });
-    }
-}
-
-function deleteLine(button) {
-    const form = button.closest('.order-line-form');
-    form.remove();
-    formCount--;
-    calculateTotals();
-}
-
-function initializeFormRow(row) {
-    if (!row) return;
-    const rawMaterialSelect = row.querySelector('select[name$="-raw_material"]');
-    const priceInput = row.querySelector('input[name$="-price"]');
-    const quantityInput = row.querySelector('input[name$="-quantity"]');
-
-    rawMaterialSelect.addEventListener('change', function() {
-        updatePrice(this);
-    });
-
-    priceInput.addEventListener('blur', function() {
-        handlePriceChange(this);
-    });
-
-    quantityInput.addEventListener('input', calculateTotals);
-
-    // Call updatePrice and calculateTotals to ensure VAT and costs are calculated
-    updatePrice(rawMaterialSelect);
-    calculateTotals();
-}
-
-function updatePrice(rawMaterialSelect) {
-    var rawMaterialId = $(rawMaterialSelect).val();
-    if (rawMaterialId) {
-        $.ajax({
-            url: "{% url 'get_raw_material_price' %}",
-            data: {
-                'raw_material_id': rawMaterialId
-            },
-            success: function(data) {
-                var priceInput = $(rawMaterialSelect).closest('.order-line-form').find('input[name$="-price"]');
-                priceInput.val(data.price);
-                priceInput.data('original-price', data.price);
-                calculateTotals();
-            }
-        });
-    }
-}
-
-function handlePriceChange(priceInput) {
-    var newPrice = $(priceInput).val();
-    var originalPrice = $(priceInput).data('original-price');
-    if (newPrice != originalPrice) {
-        if (confirm('The price has changed. Do you want to update the price in the database?')) {
-            var rawMaterialId = $(priceInput).closest('.order-line-form').find('select[name$="-raw_material"]').val();
-            $.ajax({
-                url: "{% url 'update_raw_material_price' %}",
-                method: 'POST',
-                data: {
-                    'raw_material_id': rawMaterialId,
-                    'new_price': newPrice,
-                    'csrfmiddlewaretoken': '{{ csrf_token }}'
-                },
-                success: function(response) {
-                    if (response.success) {
-                        alert('Price updated successfully in the database.');
-                        $(priceInput).data('original-price', newPrice);
-                    } else {
-                        alert('Failed to update price in the database.');
-                        $(priceInput).val(originalPrice);
-                    }
-                    calculateTotals();
-                }
-            });
-        } else {
-            $(priceInput).val(originalPrice);
-            calculateTotals();
-        }
-    }
-}
-
-function calculateTotals() {
-    let totalCost = 0;
-    let totalVAT = 0;
-    $('.order-line-form').each(function() {
-        const quantityInput = $(this).find('input[name$="-quantity"]');
-        const priceInput = $(this).find('input[name$="-price"]');
-        
-        const quantity = parseFloat(quantityInput.val()) || 0;
-        const price = parseFloat(priceInput.val()) || 0;
-        
-        const cost = quantity * price;
-        const vatRate = 0.24; // Assuming a VAT rate of 24%
-        const vat = cost * vatRate;
-        
-        $(this).find('.cost').text(cost.toFixed(2));
-        $(this).find('.vat').text(vat.toFixed(2));
-        
-        totalCost += cost;
-        totalVAT += vat;
-    });
-    $('#total-cost').text(totalCost.toFixed(2));
-    $('#total-vat').text(totalVAT.toFixed(2));
-}
-
 $(document).ready(function() {
-    totalForms = document.getElementById('id_form-TOTAL_FORMS');
-    if (!totalForms) {
-        console.log("Total Forms element not found, initializing...");
-        $('<input>').attr({
-            type: 'hidden',
-            id: 'id_form-TOTAL_FORMS',
-            name: 'form-TOTAL_FORMS',
-            value: '0'
-        }).appendTo('form');
-        totalForms = document.getElementById('id_form-TOTAL_FORMS');
-    }
-    console.log("Total Forms element:", totalForms);
+    let formCount = {{ lines.total_form_count }};
     
-
-    $('#id_supplier').change(function() {
-        var supplierId = $(this).val();
-        console.log("Supplier changed, ID:", supplierId);
-        $.ajax({
-            url: "{% url 'get_raw_materials' %}",
-            data: {
-                'supplier_id': supplierId
-            },
-            success: function(data) {
-                console.log("Received raw materials:", data);
-                $('.order-line-form select[name$="-raw_material"]').each(function() {
-                    var select = $(this);
-                    select.empty();
-                    $.each(data, function(index, item) {
-                        select.append($('<option>', {
-                            value: item.id,
-                            text: item.name
-                        }));
-                    });
-                    updatePrice(select[0]);
-                });
-            }
+    $('#add-line').click(function() {
+        const newForm = $('.order-line-form:first').clone(false);
+        newForm.find('input, select').each(function() {
+            const name = $(this).attr('name').replace('-0-', '-' + formCount + '-');
+            const id = 'id_' + name;
+            $(this).attr({'name': name, 'id': id}).val('');
         });
+        $('#order-lines-body').append(newForm);
+        formCount++;
+        $('#id_form-TOTAL_FORMS').val(formCount);
     });
 
-    // Initialize existing form rows
-    $('.order-line-form').each(function() {
-        initializeFormRow(this);
+    $('#order-lines-body').on('click', '.delete-line', function() {
+        $(this).closest('.order-line-form').remove();
+        formCount--;
+        $('#id_form-TOTAL_FORMS').val(formCount);
     });
-
-    // Initialize delete buttons
-    $('.delete-line').click(function() {
-        deleteLine(this);
-    });
-
-    calculateTotals();
-});
-
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('add-line').addEventListener('click', addForm);
 });
 </script>
-
-<style>
-.form-section {
-    margin-bottom: 20px;
-}
-.order-lines {
-    width: 100%;
-    border-collapse: collapse;
-}
-.order-lines th, .order-lines td {
-    border: 1px solid #ddd;
-    padding: 8px;
-}
-.order-lines th {
-    background-color: #f2f2f2;
-}
-</style>
 {% endblock %}

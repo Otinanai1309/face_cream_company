@@ -4,7 +4,7 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView, D
 from django.forms import inlineformset_factory
 from .models import PurchaseOrder, PurchaseOrderLine
 from .models import Supplier, RawMaterial
-from .forms import PurchaseOrderForm, PurchaseOrderLineForm
+from .forms import PurchaseOrderForm, PurchaseOrderLineForm, PurchaseOrderLineFormSet
 from django.urls import reverse_lazy
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -52,21 +52,22 @@ def home(request):
 
 
 def create_purchase_order(request):
-    PurchaseOrderLineFormSet = formset_factory(PurchaseOrderLineForm, extra=1)
     if request.method == 'POST':
         form = PurchaseOrderForm(request.POST)
         formset = PurchaseOrderLineFormSet(request.POST)
         if form.is_valid() and formset.is_valid():
             purchase_order = form.save()
-            for line_form in formset:
-                if line_form.cleaned_data:
-                    line = line_form.save(commit=False)
-                    line.purchase_order = purchase_order
-                    line.save()
-            return redirect('purchase_order_detail', pk=purchase_order.pk)
+            formset.instance = purchase_order
+            formset.save()
+            return redirect('purchaseorder_detail', pk=purchase_order.pk)
     else:
         form = PurchaseOrderForm()
-        formset = PurchaseOrderLineFormSet()
+        formset = PurchaseOrderLineFormSet(queryset=PurchaseOrderLine.objects.none())
+        
+        # Set the queryset for raw_material in each form in the formset
+        for form in formset:
+            form.fields['raw_material'].queryset = RawMaterial.objects.all()
+            
     return render(request, 'raw_materials/purchaseorder_form.html', {'form': form, 'lines': formset})
 
 # RawMaterial Views
@@ -142,6 +143,14 @@ class PurchaseOrderDetailView(DetailView):
     template_name = 'raw_materials/purchaseorder_detail.html'
     context_object_name = 'purchaseorder'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['lines'] = self.object.purchaseorderline_set.all()
+        context['total_cost'] = sum(line.cost for line in context['lines'])
+        context['total_vat'] = sum(line.vat for line in context['lines'])
+        print('context:', context)
+        return context
+
 class PurchaseOrderCreateView(CreateView):
     model = PurchaseOrder
     form_class = PurchaseOrderForm
@@ -149,23 +158,29 @@ class PurchaseOrderCreateView(CreateView):
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
+        PurchaseOrderLineFormSet = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)
+        
         if self.request.POST:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST)
+            data['lines'] = PurchaseOrderLineFormSet(self.request.POST)
         else:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)()
+            data['lines'] = PurchaseOrderLineFormSet()
         return data
 
     def form_valid(self, form):
         context = self.get_context_data()
         lines = context['lines']
-        self.object = form.save()
+        
         if lines.is_valid():
+            self.object = form.save()
             lines.instance = self.object
             lines.save()
-        return super().form_valid(form)
+            return super().form_valid(form)
+        else:
+            return self.form_invalid(form)
 
     def get_success_url(self):
         return reverse_lazy('purchaseorder_list')
+
     
 class PurchaseOrderUpdateView(UpdateView):
     model = PurchaseOrder
