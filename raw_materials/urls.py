@@ -25,9 +25,6 @@ urlpatterns = [
         
     path('', include(router.urls)),
     
-     # ... other url patterns ...
-    path('purchase-order/create/', PurchaseOrderCreateView.as_view(), name='create_purchase_order'),
-    
     # ... existing patterns ...
     path('get-raw-materials/', get_raw_materials, name='get_raw_materials'),
     path('update-raw-material-price/', update_raw_material_price, name='update_raw_material_price'),
@@ -47,10 +44,10 @@ urlpatterns = [
     path('rawmaterials/<int:pk>/update/', RawMaterialUpdateView.as_view(), name='rawmaterial_update'),
     path('rawmaterials/<int:pk>/delete/', RawMaterialDeleteView.as_view(), name='rawmaterial_delete'),
 
-    path('purchaseorders/', PurchaseOrderListView.as_view(), name='purchaseorder_list'),
-    path('purchaseorders/create/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
-    #path('purchaseorders/new/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
-    path('purchaseorders/<int:pk>/', PurchaseOrderDetailView.as_view(), name='purchaseorder_detail'),
-    path('purchaseorders/<int:pk>/update/', PurchaseOrderUpdateView.as_view(), name='purchaseorder_update'),
-    path('purchaseorders/<int:pk>/delete/', PurchaseOrderDeleteView.as_view(), name='purchaseorder_delete'),
+    path('purchase-orders/', PurchaseOrderListView.as_view(), name='purchaseorder_list'),
+    path('purchase-orders/create/', PurchaseOrderCreateView.as_view(), name='create_purchase_order'),
+    # path('purchaseorders/new/', PurchaseOrderCreateView.as_view(), name='purchaseorder_create'),
+    path('purchase-orders/<int:pk>/', PurchaseOrderDetailView.as_view(), name='purchaseorder_detail'),
+    path('purchase-orders/<int:pk>/update/', PurchaseOrderUpdateView.as_view(), name='purchaseorder_update'),
+    path('purchase-orders/<int:pk>/delete/', PurchaseOrderDeleteView.as_view(), name='purchaseorder_delete'),
 ]

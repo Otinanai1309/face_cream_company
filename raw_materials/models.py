@@ -48,11 +48,11 @@ class PurchaseOrderLine(models.Model):
     raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
-    cost = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+    # cost = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
     vat = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
 
     def save(self, *args, **kwargs):
-        self.cost = self.quantity * self.price
+        # self.cost = self.quantity * self.price
         vat_rate = Decimal(self.raw_material.vat_category.split()[0]) / 100
         self.vat = self.cost * vat_rate
         super().save(*args, **kwargs)
@@ -61,10 +61,10 @@ class PurchaseOrderLine(models.Model):
     def cost(self):
         return self.quantity * self.price
 
-    @property
+    """@property
     def vat(self):
         vat_rate = self.raw_material.get_vat_rate()
-        return self.cost * vat_rate
+        return self.cost * vat_rate"""
     
     def __str__(self):
         return f"Line for {self.raw_material.name} in order {self.purchase_order.code}"
