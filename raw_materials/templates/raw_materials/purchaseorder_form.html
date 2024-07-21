@@ -22,7 +22,7 @@
                 </tr>
             </thead>
             <tbody id="order-lines-body">
-                {% for line_form in lines.forms %}
+                {% for line_form in lines %}
                     <tr class="order-line-form">
                         <td>{{ line_form.raw_material }}</td>
                         <td>{{ line_form.quantity }}</td>
@@ -53,9 +53,7 @@ let totalForms;
 let formCount = $('.order-line-form').length;
 
 function addForm() {
-    console.log("Add Form function called");
-    console.log("Current form count:", formCount);
-    const newForm = $('.order-line-form:first').clone(true);
+    let newForm = $('.order-line-form:first').clone(true);
     newForm.find('input, select').val('');
     newForm.find('input, select').each(function() {
         let name = $(this).attr('name').replace('-0-', '-' + formCount + '-');
@@ -64,12 +62,8 @@ function addForm() {
     });
     $('#order-lines-body').append(newForm);
     formCount++;
-    console.log("New form count:", formCount);
-
+    $('#id_form-TOTAL_FORMS').val(formCount);
     initializeFormRow(newForm[0]);
-    updateRawMaterialOptions(newForm.find('select[name$="-raw_material"]'));
-
-    console.log("New form initialized and raw material options updated");
 }
 
 function updateRawMaterialOptions(select) {
@@ -199,15 +193,41 @@ function logFormsetData() {
 }
 
 $('form').submit(function(e) {
-    e.preventDefault();
-    console.log('Form submitted');
-    console.log('Form data:', $(this).serialize());
-    logFormsetData();
-    this.submit();
+    e.preventDefault(); // This line is crucial
+
+    let formData = new FormData(this);
+    
+    $.ajax({
+        url: $(this).attr('action'),
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        success: function(response) {
+            if (response.success) {
+                window.location.href = response.url;
+            } else {
+                // Handle errors
+                console.log(response.form_errors);
+                console.log(response.line_errors);
+                alert('There were errors in your submission. Please check the form and try again.');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error(error);
+            alert('An error occurred while submitting the form. Please try again.');
+        }
+    });
+
+    return false; // This line provides additional prevention of form submission
 });
 
+
 $(document).ready(function() {
-    totalForms = document.getElementById('id_form-TOTAL_FORMS');
+    let totalForms = document.getElementById('id_form-TOTAL_FORMS');
     if (!totalForms) {
         console.log("Total Forms element not found, initializing...");
         $('<input>').attr({
@@ -219,7 +239,9 @@ $(document).ready(function() {
         totalForms = document.getElementById('id_form-TOTAL_FORMS');
     }
     console.log("Total Forms element:", totalForms);
-    
+
+    let formCount = $('.order-line-form').length;
+    totalForms.value = formCount;
 
     $('#id_supplier').change(function() {
         var supplierId = $(this).val();
@@ -257,6 +279,36 @@ $(document).ready(function() {
     });
 
     calculateTotals();
+
+    // $('#add-line').click(addForm);
+
+    $('form').submit(function(e) {
+        e.preventDefault();
+        let formData = new FormData(this);
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+                if (response.success) {
+                    window.location.href = response.url;
+                } else {
+                    console.log(response.form_errors);
+                    console.log(response.line_errors);
+                    alert('There were errors in your submission. Please check the form and try again.');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error(error);
+                alert('An error occurred while submitting the form. Please try again.');
+            }
+        });
+    });
 });
 
 document.addEventListener('DOMContentLoaded', function() {

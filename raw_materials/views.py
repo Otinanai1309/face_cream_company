@@ -17,6 +17,10 @@ from django.http import JsonResponse
 from decimal import Decimal
 import logging
 
+from django.db import IntegrityError
+from django.db import transaction
+from django.core.exceptions import ValidationError
+
 logger = logging.getLogger(__name__)
 
 def get_raw_materials(request):
@@ -164,11 +168,34 @@ class PurchaseOrderCreateView(CreateView):
     def form_valid(self, form):
         context = self.get_context_data()
         lines = context['lines']
-        self.object = form.save()
-        if lines.is_valid():
-            lines.instance = self.object
-            lines.save()
+        try:
+            with transaction.atomic():
+                self.object = form.save()
+                if lines.is_valid():
+                    lines.instance = self.object
+                    lines.save()
+                else:
+                    raise ValidationError("Invalid lines data")
+        except IntegrityError:
+            form.add_error('code', 'A purchase order with this code already exists.')
+            return self.form_invalid(form)
+        except ValidationError:
+            return self.form_invalid(form)
+
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'url': self.get_success_url()})
         return super().form_valid(form)
+
+    def form_invalid(self, form):
+        context = self.get_context_data()
+        lines = context['lines']
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'form_errors': form.errors,
+                'line_errors': lines.errors if not lines.is_valid() else None
+            })
+        return super().form_invalid(form)
 
     def get_success_url(self):
         return reverse_lazy('purchaseorder_list')

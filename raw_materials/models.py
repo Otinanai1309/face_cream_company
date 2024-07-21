@@ -1,5 +1,6 @@
 from django.db import models
 from decimal import Decimal
+import uuid
 
 class Supplier(models.Model):
     code = models.CharField(max_length=20, unique=True)
@@ -29,6 +30,8 @@ class RawMaterial(models.Model):
         return self.name
 
 class PurchaseOrder(models.Model):
+    code = models.CharField(max_length=20, unique=True, default=uuid.uuid4)
+
     ORDER_STATES = [
         ('pending', 'Pending'),
         ('completed', 'Completed'),
@@ -39,6 +42,11 @@ class PurchaseOrder(models.Model):
     date = models.DateField()
     estimated_delivery_date = models.DateField()
     state = models.CharField(max_length=20, choices=ORDER_STATES, default='pending')
+    
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = str(uuid.uuid4())[:20]
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Order {self.code} by {self.supplier.name}"
