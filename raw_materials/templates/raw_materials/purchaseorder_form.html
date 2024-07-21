@@ -185,6 +185,47 @@ function calculateTotals() {
     $('#total-vat').text(totalVAT.toFixed(2));
 }
 
+function validateForm() {
+    let isValid = true;
+    $('.error-message').remove(); // Clear previous error messages
+
+    // Validate main form fields
+    if (!$('#id_supplier').val()) {
+        $('#id_supplier').after('<span class="error-message">Supplier is required</span>');
+        isValid = false;
+    }
+    if (!$('#id_date').val()) {
+        $('#id_date').after('<span class="error-message">Date is required</span>');
+        isValid = false;
+    }
+    if (!$('#id_estimated_delivery_date').val()) {
+        $('#id_estimated_delivery_date').after('<span class="error-message">Estimated delivery date is required</span>');
+        isValid = false;
+    }
+
+    // Validate order lines
+    $('.order-line-form').each(function(index) {
+        let rawMaterial = $(this).find('select[name$="-raw_material"]').val();
+        let quantity = $(this).find('input[name$="-quantity"]').val();
+        let price = $(this).find('input[name$="-price"]').val();
+
+        if (!rawMaterial) {
+            $(this).find('select[name$="-raw_material"]').after('<span class="error-message">Raw material is required</span>');
+            isValid = false;
+        }
+        if (!quantity || isNaN(quantity) || quantity <= 0) {
+            $(this).find('input[name$="-quantity"]').after('<span class="error-message">Valid quantity is required</span>');
+            isValid = false;
+        }
+        if (!price || isNaN(price) || price <= 0) {
+            $(this).find('input[name$="-price"]').after('<span class="error-message">Valid price is required</span>');
+            isValid = false;
+        }
+    });
+
+    return isValid;
+}
+
 function logFormsetData() {
     console.log('Formset data:');
     $('.order-line-form').each(function(index) {
@@ -194,6 +235,10 @@ function logFormsetData() {
 
 $('form').submit(function(e) {
     e.preventDefault(); // This line is crucial
+
+    if (!validateForm()) {
+        return false;
+    }
 
     let formData = new FormData(this);
     
@@ -330,6 +375,12 @@ document.addEventListener('DOMContentLoaded', function() {
 }
 .order-lines th {
     background-color: #f2f2f2;
+}
+.error-message {
+    color: red;
+    font-size: 0.8em;
+    display: block;
+    margin-top: 5px;
 }
 </style>
 {% endblock %}

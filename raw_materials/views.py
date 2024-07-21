@@ -175,6 +175,9 @@ class PurchaseOrderCreateView(CreateView):
                     lines.instance = self.object
                     lines.save()
                 else:
+                    for line_form in lines:
+                        if line_form.errors:
+                            logger.error(f"Line form errors: {line_form.errors}")
                     raise ValidationError("Invalid lines data")
         except IntegrityError:
             form.add_error('code', 'A purchase order with this code already exists.')
@@ -187,6 +190,7 @@ class PurchaseOrderCreateView(CreateView):
         return super().form_valid(form)
 
     def form_invalid(self, form):
+        logger.error(f"Form errors: {form.errors}")
         context = self.get_context_data()
         lines = context['lines']
         if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -195,6 +199,7 @@ class PurchaseOrderCreateView(CreateView):
                 'form_errors': form.errors,
                 'line_errors': lines.errors if not lines.is_valid() else None
             })
+            logger.error(f"Line errors: {lines.errors}")
         return super().form_invalid(form)
 
     def get_success_url(self):
