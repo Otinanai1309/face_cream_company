@@ -62,7 +62,7 @@ function addForm() {
     });
     $('#order-lines-body').append(newForm);
     formCount++;
-    $('#id_form-TOTAL_FORMS').val(formCount);
+    $('#id_purchaseorderline_set-TOTAL_FORMS').val(formCount);
     initializeFormRow(newForm[0]);
 }
 
@@ -234,20 +234,20 @@ function logFormsetData() {
 }
 
 $(document).ready(function() {
-    let totalForms = document.getElementById('id_form-TOTAL_FORMS');
+    totalForms = document.getElementById('id_purchaseorderline_set-TOTAL_FORMS');
     if (!totalForms) {
         console.log("Total Forms element not found, initializing...");
         $('<input>').attr({
             type: 'hidden',
-            id: 'id_form-TOTAL_FORMS',
-            name: 'form-TOTAL_FORMS',
+            id: 'id_purchaseorderline_set-TOTAL_FORMS',
+            name: 'purchaseorderline_set-TOTAL_FORMS',
             value: '0'
         }).appendTo('form');
-        totalForms = document.getElementById('id_form-TOTAL_FORMS');
+        totalForms = document.getElementById('id_purchaseorderline_set-TOTAL_FORMS');
     }
     console.log("Total Forms element:", totalForms);
 
-    let formCount = $('.order-line-form').length;
+    formCount = $('.order-line-form').length;
     totalForms.value = formCount;
 
     $('#id_supplier').change(function() {
