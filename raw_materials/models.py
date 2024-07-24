@@ -30,14 +30,14 @@ class RawMaterial(models.Model):
         return self.name
 
 class PurchaseOrder(models.Model):
-    code = models.CharField(max_length=20, unique=True, default=uuid.uuid4)
+    # code = models.CharField(max_length=20, unique=False, default=uuid.uuid4)
 
     ORDER_STATES = [
         ('pending', 'Pending'),
         ('completed', 'Completed'),
         ('partial_pending', 'Partial Pending'),
     ]
-    code = models.CharField(max_length=20, unique=True)
+    code = models.CharField(max_length=20, unique=False)
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
     date = models.DateField()
     estimated_delivery_date = models.DateField()

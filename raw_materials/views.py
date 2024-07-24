@@ -1,6 +1,8 @@
 # views.py
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
+from django.views.generic.edit import CreateView
+from django.views.generic import TemplateView
 from django.forms import inlineformset_factory
 from .models import PurchaseOrder, PurchaseOrderLine
 from .models import Supplier, RawMaterial
@@ -55,9 +57,11 @@ def get_raw_material_vat_rate(request):
 
 
 def home(request):
-    return render(request, 'home.html')
+    return render(request, 'index.html')
 
-
+class IndexView(TemplateView):
+    template_name = "index.html"
+    
 """def create_purchase_order(request):
     PurchaseOrderLineFormSet = formset_factory(PurchaseOrderLineForm, extra=1)
     if request.method == 'POST':
@@ -168,42 +172,34 @@ class PurchaseOrderCreateView(CreateView):
     def form_valid(self, form):
         context = self.get_context_data()
         lines = context['lines']
-        try:
-            with transaction.atomic():
-                self.object = form.save()
-                if lines.is_valid():
-                    lines.instance = self.object
-                    lines.save()
-                else:
-                    for line_form in lines:
-                        if line_form.errors:
-                            logger.error(f"Line form errors: {line_form.errors}")
-                    raise ValidationError("Invalid lines data")
-        except IntegrityError:
-            form.add_error('code', 'A purchase order with this code already exists.')
-            return self.form_invalid(form)
-        except ValidationError:
-            return self.form_invalid(form)
+        print('lines', lines)
+        with transaction.atomic():
+            self.object = form.save()
+            if lines.is_valid():
+                for line_form in lines:
+                    if line_form.cleaned_data and not line_form.cleaned_data.get('DELETE', False):
+                        line = line_form.save(commit=False)
+                        line.purchase_order = self.object
+                        print('line', line, 'line.purchase')
+                        line.save()
+        return JsonResponse({'success': True, 'url': self.get_success_url()})
 
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({'success': True, 'url': self.get_success_url()})
-        return super().form_valid(form)
+
 
     def form_invalid(self, form):
-        logger.error(f"Form errors: {form.errors}")
         context = self.get_context_data()
         lines = context['lines']
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({
-                'success': False,
-                'form_errors': form.errors,
-                'line_errors': lines.errors if not lines.is_valid() else None
-            })
-            logger.error(f"Line errors: {lines.errors}")
-        return super().form_invalid(form)
+        print('form invalid lines:', lines)
+        form_errors = form.errors
+        line_errors = lines.errors
+        print('form_errors', form_errors, 'line_errors', line_errors)
+        return JsonResponse({'success': False, 'form_errors': form_errors, 'line_errors': line_errors})
 
     def get_success_url(self):
-        return reverse_lazy('purchaseorder_list')
+        return '/api/purchase-orders/'
+
+"""    def get_success_url(self):
+        return reverse_lazy('purchaseorder_list')"""
     
 class PurchaseOrderUpdateView(UpdateView):
     model = PurchaseOrder

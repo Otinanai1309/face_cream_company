@@ -4,8 +4,8 @@ from .views import (
     SupplierListView, SupplierDetailView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView,
     RawMaterialListView, RawMaterialDetailView, RawMaterialCreateView, RawMaterialUpdateView, RawMaterialDeleteView,
     PurchaseOrderListView, PurchaseOrderDetailView, PurchaseOrderCreateView, PurchaseOrderUpdateView, PurchaseOrderDeleteView,
-    home,
-)
+    home, IndexView
+    )
 
 from rest_framework.routers import DefaultRouter
 from .views import SupplierViewSet, RawMaterialViewSet, PurchaseOrderViewSet, PurchaseOrderLineViewSet

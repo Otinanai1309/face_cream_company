@@ -1,6 +1,7 @@
 from django import forms
 from django.forms import DateInput
 from .models import PurchaseOrder, PurchaseOrderLine, RawMaterial
+from django.core.validators import MinValueValidator
 
 class PurchaseOrderForm(forms.ModelForm):
     class Meta:
@@ -21,6 +22,8 @@ class PurchaseOrderLineForm(forms.ModelForm):
         supplier = kwargs.pop('supplier', None)
         super().__init__(*args, **kwargs)
         if supplier:
+            self.fields['quantity'].validators.append(MinValueValidator(1))
+            self.fields['price'].validators.append(MinValueValidator(0))
             self.fields['raw_material'].queryset = RawMaterial.objects.filter(suppliers=supplier)
         # self.fields['raw_material'].queryset = RawMaterial.objects.none()
         # self.fields['price'].widget.attrs['readonly'] = False

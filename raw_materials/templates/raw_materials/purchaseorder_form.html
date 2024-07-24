@@ -2,7 +2,7 @@
 
 {% block content %}
 <h2>{% if object %}Update{% else %}Create{% endif %} Purchase Order</h2>
-<form method="post" action="{% url 'create_purchase_order' %}">
+<form method="post" action="{% url 'create_purchase_order' %}" id="purchase-order-form">
     {% csrf_token %}
     <div class="form-section">
         {{ form.as_p }}
@@ -43,7 +43,7 @@
         <p>Total Cost: <span id="total-cost">0.00</span></p>
         <p>Total VAT: <span id="total-vat">0.00</span></p>
     </div>
-    <button type="submit">Save</button>
+    <button type="submit" id="submit-button">Save</button>
 </form>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -233,44 +233,6 @@ function logFormsetData() {
     });
 }
 
-$('form').submit(function(e) {
-    e.preventDefault(); // This line is crucial
-
-    if (!validateForm()) {
-        return false;
-    }
-
-    let formData = new FormData(this);
-    
-    $.ajax({
-        url: $(this).attr('action'),
-        type: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-        },
-        success: function(response) {
-            if (response.success) {
-                window.location.href = response.url;
-            } else {
-                // Handle errors
-                console.log(response.form_errors);
-                console.log(response.line_errors);
-                alert('There were errors in your submission. Please check the form and try again.');
-            }
-        },
-        error: function(xhr, status, error) {
-            console.error(error);
-            alert('An error occurred while submitting the form. Please try again.');
-        }
-    });
-
-    return false; // This line provides additional prevention of form submission
-});
-
-
 $(document).ready(function() {
     let totalForms = document.getElementById('id_form-TOTAL_FORMS');
     if (!totalForms) {
@@ -325,11 +287,27 @@ $(document).ready(function() {
 
     calculateTotals();
 
-    // $('#add-line').click(addForm);
+    document.getElementById('add-line').addEventListener('click', addForm);
+
+    let formSubmitted = false;
 
     $('form').submit(function(e) {
-        e.preventDefault();
+        e.preventDefault(); // Prevent the default form submission
+    
+        if (formSubmitted) {
+            return false; // Prevent multiple submissions
+        }
+    
+        formSubmitted = true; // Set the flag to true
+        $('#submit-button').prop('disabled', true); // Disable the submit button
+    
         let formData = new FormData(this);
+    
+        // Log form data
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+    
         $.ajax({
             url: $(this).attr('action'),
             type: 'POST',
@@ -343,16 +321,23 @@ $(document).ready(function() {
                 if (response.success) {
                     window.location.href = response.url;
                 } else {
+                    // Handle errors
                     console.log(response.form_errors);
                     console.log(response.line_errors);
                     alert('There were errors in your submission. Please check the form and try again.');
+                    formSubmitted = false; // Reset the flag on error
+                    $('#submit-button').prop('disabled', false); // Enable the submit button
                 }
             },
             error: function(xhr, status, error) {
                 console.error(error);
                 alert('An error occurred while submitting the form. Please try again.');
+                formSubmitted = false; // Reset the flag on error
+                $('#submit-button').prop('disabled', false); // Enable the submit button
             }
         });
+    
+        return false; // Prevent the default form submission
     });
 });
 
