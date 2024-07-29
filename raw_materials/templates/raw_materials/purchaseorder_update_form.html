@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Update Purchase Order</h2>
+<form method="post" id="purchase-order-update-form">
+    {% csrf_token %}
+    <div class="form-section">
+        {{ form.as_p }}
+    </div>
+    <div class="form-section">
+        <h3>Order Lines</h3>
+        {{ lines.management_form }}
+        <table class="order-lines">
+            <thead>
+                <tr>
+                    <th>Raw Material</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Cost</th>
+                    <th>VAT</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="order-lines-body">
+                {% for line_form in lines %}
+                    <tr class="order-line-form">
+                        <td>{{ line_form.raw_material }}</td>
+                        <td>{{ line_form.quantity }}</td>
+                        <td>{{ line_form.price }}</td>
+                        <td class="cost">{% if line_form.instance.pk and line_form.instance.cost is not None %}{{ line_form.instance.cost }}{% endif %}</td>
+                        <td class="vat">{% if line_form.instance.pk and line_form.instance.vat is not None %}{{ line_form.instance.vat }}{% endif %}</td>
+                        <td>
+                            {{ line_form.DELETE }}
+                            <label for="{{ line_form.DELETE.id_for_label }}">Delete</label>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <button type="button" id="add-line">Add Line</button>
+    </div>
+    <button type="submit" id="submit-button">Update Order</button>
+</form>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+let totalForms;
+
+let formCount = $('.order-line-form').length;
+
+function addForm() {
+    let newForm = $('.order-line-form:first').clone(true);
+    newForm.find('input, select').val('');
+    newForm.find('input, select').each(function() {
+        let name = $(this).attr('name').replace('-0-', '-' + formCount + '-');
+        let id = 'id_' + name;
+        $(this).attr({'name': name, 'id': id});
+    });
+    $('#order-lines-body').append(newForm);
+    formCount++;
+    $('#id_purchaseorderline_set-TOTAL_FORMS').val(formCount);
+    initializeFormRow(newForm[0]);
+}
+
+function updateRawMaterialOptions(select) {
+    const supplierId = $('#id_supplier').val();
+    if (supplierId) {
+        $.ajax({
+            url: "{% url 'get_raw_materials' %}",
+            data: { 'supplier_id': supplierId },
+            success: function(data) {
+                $(select).empty();
+                $.each(data, function(index, item) {
+                    $(select).append($('<option></option>').attr('value', item.id).text(item.name));
+                });
+                updatePrice(select);
+            }
+        });
+    }
+}
+
+function deleteLine(button) {
+    const form = button.closest('.order-line-form');
+    form.remove();
+    formCount--;
+    calculateTotals();
+}
+
+function initializeFormRow(row) {
+    if (!row) return;
+    const rawMaterialSelect = row.querySelector('select[name$="-raw_material"]');
+    const priceInput = row.querySelector('input[name$="-price"]');
+    const quantityInput = row.querySelector('input[name$="-quantity"]');
+
+    rawMaterialSelect.addEventListener('change', function() {
+        updatePrice(this);
+    });
+
+    priceInput.addEventListener('blur', function() {
+        handlePriceChange(this);
+    });
+
+    quantityInput.addEventListener('input', calculateTotals);
+
+    // Call updatePrice and calculateTotals to ensure VAT and costs are calculated
+    updatePrice(rawMaterialSelect);
+    calculateTotals();
+}
+
+function updatePrice(rawMaterialSelect) {
+    var rawMaterialId = $(rawMaterialSelect).val();
+    if (rawMaterialId) {
+        $.ajax({
+            url: "{% url 'get_raw_material_price' %}",
+            data: {
+                'raw_material_id': rawMaterialId
+            },
+            success: function(data) {
+                var priceInput = $(rawMaterialSelect).closest('.order-line-form').find('input[name$="-price"]');
+                priceInput.val(data.price);
+                priceInput.data('original-price', data.price);
+                calculateTotals();
+            }
+        });
+    }
+}
+
+function handlePriceChange(priceInput) {
+    var newPrice = $(priceInput).val();
+    var originalPrice = $(priceInput).data('original-price');
+    if (newPrice != originalPrice) {
+        if (confirm('The price has changed. Do you want to update the price in the database?')) {
+            var rawMaterialId = $(priceInput).closest('.order-line-form').find('select[name$="-raw_material"]').val();
+            $.ajax({
+                url: "{% url 'update_raw_material_price' %}",
+                method: 'POST',
+                data: {
+                    'raw_material_id': rawMaterialId,
+                    'new_price': newPrice,
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert('Price updated successfully in the database.');
+                        $(priceInput).data('original-price', newPrice);
+                    } else {
+                        alert('Failed to update price in the database.');
+                        $(priceInput).val(originalPrice);
+                    }
+                    calculateTotals();
+                }
+            });
+        } else {
+            $(priceInput).val(originalPrice);
+            calculateTotals();
+        }
+    }
+}
+
+function calculateTotals() {
+    let totalCost = 0;
+    let totalVAT = 0;
+    $('.order-line-form').each(function() {
+        const quantityInput = $(this).find('input[name$="-quantity"]');
+        const priceInput = $(this).find('input[name$="-price"]');
+        
+        const quantity = parseFloat(quantityInput.val()) || 0;
+        const price = parseFloat(priceInput.val()) || 0;
+        
+        const cost = quantity * price;
+        const vatRate = 0.24; // Assuming a VAT rate of 24%
+        const vat = cost * vatRate;
+        
+        $(this).find('.cost').text(cost.toFixed(2));
+        $(this).find('.vat').text(vat.toFixed(2));
+        
+        totalCost += cost;
+        totalVAT += vat;
+    });
+    $('#total-cost').text(totalCost.toFixed(2));
+    $('#total-vat').text(totalVAT.toFixed(2));
+}
+
+function validateForm() {
+    let isValid = true;
+    $('.error-message').remove(); // Clear previous error messages
+
+    // Validate main form fields
+    if (!$('#id_supplier').val()) {
+        $('#id_supplier').after('<span class="error-message">Supplier is required</span>');
+        isValid = false;
+    }
+    if (!$('#id_date').val()) {
+        $('#id_date').after('<span class="error-message">Date is required</span>');
+        isValid = false;
+    }
+    if (!$('#id_estimated_delivery_date').val()) {
+        $('#id_estimated_delivery_date').after('<span class="error-message">Estimated delivery date is required</span>');
+        isValid = false;
+    }
+
+    // Validate order lines
+    $('.order-line-form').each(function(index) {
+        let rawMaterial = $(this).find('select[name$="-raw_material"]').val();
+        let quantity = $(this).find('input[name$="-quantity"]').val();
+        let price = $(this).find('input[name$="-price"]').val();
+
+        if (!rawMaterial) {
+            $(this).find('select[name$="-raw_material"]').after('<span class="error-message">Raw material is required</span>');
+            isValid = false;
+        }
+        if (!quantity || isNaN(quantity) || quantity <= 0) {
+            $(this).find('input[name$="-quantity"]').after('<span class="error-message">Valid quantity is required</span>');
+            isValid = false;
+        }
+        if (!price || isNaN(price) || price <= 0) {
+            $(this).find('input[name$="-price"]').after('<span class="error-message">Valid price is required</span>');
+            isValid = false;
+        }
+    });
+
+    return isValid;
+}
+
+function logFormsetData() {
+    console.log('Formset data:');
+    $('.order-line-form').each(function(index) {
+        console.log('Form ' + index + ':', $(this).find('input, select').serialize());
+    });
+}
+
+$(document).ready(function() {
+    totalForms = document.getElementById('id_purchaseorderline_set-TOTAL_FORMS');
+    if (!totalForms) {
+        console.log("Total Forms element not found, initializing...");
+        $('<input>').attr({
+            type: 'hidden',
+            id: 'id_purchaseorderline_set-TOTAL_FORMS',
+            name: 'purchaseorderline_set-TOTAL_FORMS',
+            value: '0'
+        }).appendTo('form');
+        totalForms = document.getElementById('id_purchaseorderline_set-TOTAL_FORMS');
+    }
+    console.log("Total Forms element:", totalForms);
+
+    formCount = $('.order-line-form').length;
+    totalForms.value = formCount;
+
+    $('#id_supplier').change(function() {
+        var supplierId = $(this).val();
+        console.log("Supplier changed, ID:", supplierId);
+        $.ajax({
+            url: "{% url 'get_raw_materials' %}",
+            data: {
+                'supplier_id': supplierId
+            },
+            success: function(data) {
+                console.log("Received raw materials:", data);
+                $('.order-line-form select[name$="-raw_material"]').each(function() {
+                    var select = $(this);
+                    select.empty();
+                    $.each(data, function(index, item) {
+                        select.append($('<option>', {
+                            value: item.id,
+                            text: item.name
+                        }));
+                    });
+                    updatePrice(select[0]);
+                });
+            }
+        });
+    });
+
+    // Initialize existing form rows
+    $('.order-line-form').each(function() {
+        initializeFormRow(this);
+    });
+
+    // Initialize delete buttons
+    $('.delete-line').click(function() {
+        deleteLine(this);
+    });
+
+    calculateTotals();
+
+    document.getElementById('add-line').addEventListener('click', addForm);
+
+    let formSubmitted = false;
+
+    $('form').submit(function(e) {
+        e.preventDefault(); // Prevent the default form submission
+    
+        if (formSubmitted) {
+            return false; // Prevent multiple submissions
+        }
+    
+        formSubmitted = true; // Set the flag to true
+        $('#submit-button').prop('disabled', true); // Disable the submit button
+    
+        let formData = new FormData(this);
+    
+        // Log form data
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+    
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+              if (response.success) {
+                  window.location.href = response.url;
+              } else {
+                  // Handle errors
+                  console.log('Form errors:', response.form_errors);
+                  console.log('Line errors:', response.line_errors);
+                  let errorMessage = 'There were errors in your submission:\n\n';
+                  if (response.form_errors) {
+                      for (let field in response.form_errors) {
+                          errorMessage += `${field}: ${response.form_errors[field].join(', ')}\n`;
+                      }
+                  }
+                  if (response.line_errors) {
+                      response.line_errors.forEach((lineError, index) => {
+                          for (let field in lineError) {
+                              errorMessage += `Line ${index + 1} - ${field}: ${lineError[field].join(', ')}\n`;
+                          }
+                      });
+                  }
+                  alert(errorMessage);
+                  formSubmitted = false; // Reset the flag on error
+                  $('#submit-button').prop('disabled', false); // Enable the submit button
+              }
+            },
+        });
+    
+        return false; // Prevent the default form submission
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('add-line').addEventListener('click', addForm);
+});
+</script>
+
+<style>
+.form-section {
+    margin-bottom: 20px;
+}
+.order-lines {
+    width: 100%;
+    border-collapse: collapse;
+}
+.order-lines th, .order-lines td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+.order-lines th {
+    background-color: #f2f2f2;
+}
+.error-message {
+    color: red;
+    font-size: 0.8em;
+    display: block;
+    margin-top: 5px;
+}
+</style>
+{% endblock %}

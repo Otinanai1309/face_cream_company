@@ -37,7 +37,7 @@ class PurchaseOrder(models.Model):
         ('completed', 'Completed'),
         ('partial_pending', 'Partial Pending'),
     ]
-    code = models.CharField(max_length=20, unique=False)
+    code = models.CharField(max_length=20, unique=True)
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
     date = models.DateField()
     estimated_delivery_date = models.DateField()
@@ -54,25 +54,23 @@ class PurchaseOrder(models.Model):
 class PurchaseOrderLine(models.Model):
     purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.CASCADE)
     raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)
-    quantity = models.IntegerField()
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    # cost = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
-    vat = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+    quantity = models.IntegerField(null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    vat = models.DecimalField(max_digits=10, decimal_places=2, editable=False, null=True, blank=True)
 
-    def save(self, *args, **kwargs):
-        # self.cost = self.quantity * self.price
-        vat_rate = Decimal(self.raw_material.vat_category.split()[0]) / 100
-        self.vat = self.cost * vat_rate
-        super().save(*args, **kwargs)
-        
     @property
     def cost(self):
-        return self.quantity * self.price
+        if self.quantity is not None and self.price is not None:
+            return self.quantity * self.price
+        return None
 
-    """@property
-    def vat(self):
-        vat_rate = self.raw_material.get_vat_rate()
-        return self.cost * vat_rate"""
-    
+    def save(self, *args, **kwargs):
+        if self.cost is not None:
+            vat_rate = Decimal(self.raw_material.vat_category.split()[0]) / 100
+            self.vat = self.cost * vat_rate
+        else:
+            self.vat = None
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Line for {self.raw_material.name} in order {self.purchase_order.code}"

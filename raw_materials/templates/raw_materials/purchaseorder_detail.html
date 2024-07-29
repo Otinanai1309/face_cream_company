@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block content %}
 <h2>Purchase Order Details</h2>
 <p><strong>Code:</strong> {{ purchaseorder.code }}</p>
@@ -9,7 +8,7 @@
 <p><strong>State:</strong> {{ purchaseorder.get_state_display }}</p>
 
 <h3>Order Lines</h3>
-<table>
+<table class="table">
     <thead>
         <tr>
             <th>Raw Material</th>
@@ -20,7 +19,6 @@
         </tr>
     </thead>
     <tbody>
-        <p>Debug: Number of order lines: {{ purchaseorder.purchaseorderline_set.all|length }}</p>
         {% for line in lines %}
         <tr>
             <td>{{ line.raw_material }}</td>
@@ -38,7 +36,6 @@
             <td><strong>{{ total_vat }}</strong></td>
         </tr>
     </tfoot>
-    
 </table>
 
 <a href="{% url 'purchaseorder_update' purchaseorder.pk %}" class="btn btn-primary">Edit</a>

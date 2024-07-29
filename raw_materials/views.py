@@ -1,7 +1,7 @@
 # views.py
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
-from django.views.generic.edit import CreateView
+from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
 from django.forms import inlineformset_factory
 from .models import PurchaseOrder, PurchaseOrderLine
@@ -156,6 +156,13 @@ class PurchaseOrderDetailView(DetailView):
     template_name = 'raw_materials/purchaseorder_detail.html'
     context_object_name = 'purchaseorder'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['lines'] = self.object.purchaseorderline_set.all()
+        context['total_cost'] = sum(line.cost for line in context['lines'])
+        context['total_vat'] = sum(line.vat for line in context['lines'])
+        return context
+
 class PurchaseOrderCreateView(CreateView):
     model = PurchaseOrder
     form_class = PurchaseOrderForm
@@ -201,33 +208,55 @@ class PurchaseOrderCreateView(CreateView):
 """    def get_success_url(self):
         return reverse_lazy('purchaseorder_list')"""
     
+
 class PurchaseOrderUpdateView(UpdateView):
     model = PurchaseOrder
     form_class = PurchaseOrderForm
-    template_name = 'raw_materials/purchaseorder_form.html'
+    template_name = 'raw_materials/purchaseorder_update_form.html'
 
-    def get_form(self, form_class=None):
-        form = super().get_form(form_class)
-        form.fields['code'].widget.attrs['readonly'] = True
-        return form
-    
-    """def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
+        PurchaseOrderLineFormSet = inlineformset_factory(
+            PurchaseOrder, 
+            PurchaseOrderLine, 
+            form=PurchaseOrderLineForm, 
+            extra=1,
+            can_delete=True
+        )
         if self.request.POST:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(self.request.POST, instance=self.object, form_kwargs={'supplier': self.object.supplier})
+            data['lines'] = PurchaseOrderLineFormSet(
+                self.request.POST, 
+                instance=self.object,
+                form_kwargs={'supplier': self.object.supplier}
+            )
         else:
-            data['lines'] = inlineformset_factory(PurchaseOrder, PurchaseOrderLine, form=PurchaseOrderLineForm, extra=1)(instance=self.object, form_kwargs={'supplier': self.object.supplier})
-        return data"""
-        
+            data['lines'] = PurchaseOrderLineFormSet(
+                instance=self.object,
+                form_kwargs={'supplier': self.object.supplier}
+            )
+        return data
+
     def form_valid(self, form):
         context = self.get_context_data()
         lines = context['lines']
-        self.object = form.save()
-        if lines.is_valid():
-            lines.instance = self.object
-            lines.save()
-        return super().form_valid(form)
+        with transaction.atomic():
+            self.object = form.save()
+            if lines.is_valid():
+                lines.instance = self.object
+                lines.save()
+            else:
+                return self.form_invalid(form)
+        return JsonResponse({'success': True, 'url': self.get_success_url()})
 
+    def form_invalid(self, form):
+        context = self.get_context_data()
+        lines = context['lines']
+        return JsonResponse({
+            'success': False,
+            'form_errors': form.errors,
+            'line_errors': [form.errors for form in lines.forms if form.errors]
+        })
+         
     def get_success_url(self):
         return reverse_lazy('purchaseorder_list')
         #return reverse_lazy('purchaseorder_detail', kwargs={'pk': self.object.pk})
