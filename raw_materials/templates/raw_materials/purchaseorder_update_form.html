@@ -21,19 +21,20 @@
                 </tr>
             </thead>
             <tbody id="order-lines-body">
-                {% for line_form in lines %}
-                    <tr class="order-line-form">
-                        <td>{{ line_form.raw_material }}</td>
-                        <td>{{ line_form.quantity }}</td>
-                        <td>{{ line_form.price }}</td>
-                        <td class="cost">{% if line_form.instance.pk and line_form.instance.cost is not None %}{{ line_form.instance.cost }}{% endif %}</td>
-                        <td class="vat">{% if line_form.instance.pk and line_form.instance.vat is not None %}{{ line_form.instance.vat }}{% endif %}</td>
-                        <td>
-                            {{ line_form.DELETE }}
-                            <label for="{{ line_form.DELETE.id_for_label }}">Delete</label>
-                        </td>
-                    </tr>
-                {% endfor %}
+              {% for line_form in lines %}
+              <tr class="order-line-form">
+                  {{ line_form.id }}  <!-- Add this line -->
+                  <td>{{ line_form.raw_material }}</td>
+                  <td>{{ line_form.quantity }}</td>
+                  <td>{{ line_form.price }}</td>
+                  <td class="cost">{% if line_form.instance.pk and line_form.instance.cost is not None %}{{ line_form.instance.cost }}{% endif %}</td>
+                  <td class="vat">{% if line_form.instance.pk and line_form.instance.vat is not None %}{{ line_form.instance.vat }}{% endif %}</td>
+                  <td>
+                      {{ line_form.DELETE }}
+                      <label for="{{ line_form.DELETE.id_for_label }}">Delete</label>
+                  </td>
+              </tr>
+              {% endfor %}
             </tbody>
         </table>
         <button type="button" id="add-line">Add Line</button>

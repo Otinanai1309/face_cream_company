@@ -18,11 +18,14 @@ from django.core.validators import MinValueValidator
 from .models import PurchaseOrderLine, RawMaterial
 
 class PurchaseOrderLineForm(forms.ModelForm):
+    id = forms.IntegerField(required=False, widget=forms.HiddenInput())
+
     class Meta:
         model = PurchaseOrderLine
-        fields = ['raw_material', 'quantity', 'price']
+        fields = ['id', 'raw_material', 'quantity', 'price']
 
     def __init__(self, *args, **kwargs):
+        from django.core.validators import MinValueValidator
         self.supplier = kwargs.pop('supplier', None)
         super().__init__(*args, **kwargs)
 
@@ -37,5 +40,6 @@ class PurchaseOrderLineForm(forms.ModelForm):
             self.fields['raw_material'].queryset = RawMaterial.objects.none()
 
         # Make fields not required for the form (but keep the model validation)
+        self.fields['raw_material'].required = False
         self.fields['quantity'].required = False
         self.fields['price'].required = False

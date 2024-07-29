@@ -1,9 +1,10 @@
 # views.py
+from django import forms
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
-from django.forms import inlineformset_factory
+
 from .models import PurchaseOrder, PurchaseOrderLine
 from .models import Supplier, RawMaterial
 from .forms import PurchaseOrderForm, PurchaseOrderLineForm
@@ -13,6 +14,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .serializers import SupplierSerializer, RawMaterialSerializer, PurchaseOrderSerializer, PurchaseOrderLineSerializer
 from django.forms import formset_factory
+from django.forms import inlineformset_factory
 
 from django.http import JsonResponse
 
@@ -24,6 +26,14 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
+
+PurchaseOrderLineFormSet = inlineformset_factory(
+    PurchaseOrder, 
+    PurchaseOrderLine, 
+    form=PurchaseOrderLineForm, 
+    extra=1,
+    can_delete=True
+)
 
 def get_raw_materials(request):
     supplier_id = request.GET.get('supplier_id')
@@ -216,13 +226,6 @@ class PurchaseOrderUpdateView(UpdateView):
 
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        PurchaseOrderLineFormSet = inlineformset_factory(
-            PurchaseOrder, 
-            PurchaseOrderLine, 
-            form=PurchaseOrderLineForm, 
-            extra=1,
-            can_delete=True
-        )
         if self.request.POST:
             data['lines'] = PurchaseOrderLineFormSet(
                 self.request.POST, 
@@ -256,6 +259,7 @@ class PurchaseOrderUpdateView(UpdateView):
             'form_errors': form.errors,
             'line_errors': [form.errors for form in lines.forms if form.errors]
         })
+
          
     def get_success_url(self):
         return reverse_lazy('purchaseorder_list')
