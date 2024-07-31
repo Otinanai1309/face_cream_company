@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>Create Purchase Invoice</h1>
+    <form id="create-purchase-invoice" method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create</button>
+        <div class="alert alert-success" id="success-message" style="display: none;">Purchase invoice created successfully.</div>
+    </form>
+
+    <script>
+        $(document).ready(function() {
+            $('#create-purchase-invoice').validate({
+                rules: {
+                    date_of_invoice: "required",
+                    total_cost: "required",
+                    supplier: "required",
+                    payment_terms: "required"
+                },
+                messages: {
+                    date_of_invoice: "",
+                    total_cost: "",
+                    supplier: "",
+                    payment_terms: ""
+                },
+                highlight: function(element, errorClass) {
+                    $(element).addClass("is-invalid");
+                },
+                unhighlight: function(element, errorClass) {
+                    $(element).removeClass("is-invalid");
+                }
+            });
+
+            $('#create-purchase-invoice').submit(function(event) {
+                event.preventDefault();
+                var form = $(this);
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'purchase_invoice_create' %}",
+                    data: form.serialize(),
+                    success: function(response) {
+                        if (response.result === 'success') {
+                            $('#success-message').show().delay(2000).fadeOut();
+                            setTimeout(function() { window.location.href = response.redirect; }, 2500);
+                        } else {
+                            alert('Error creating purchase invoice');
+                        }
+                    },
+                    error: function(xhr, status) {
+                        console.log("error");
+                    }
+                });
+            });
+
+            $('#add-purchase-invoice-line').click(function(event) {
+                event.preventDefault();
+                var line_form = $('#purchase_invoice_line_form');
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'purchase_invoice_add_line' %}",
+                    data: line_form.serialize(),
+                    success: function(response) {
+                        if (response.result === 'success') {
+                            $('#line-added-message').show().delay(2000).fadeOut();
+                            setTimeout(function() { window.location.href = response.redirect; }, 2500);
+                        } else {
+                            alert('Error adding purchase invoice line');
+                        }
+                    },
+                    error: function(xhr, status) {
+                        console.log("error");
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}

@@ -7,7 +7,8 @@ from django.views.generic import TemplateView
 
 from .models import PurchaseOrder, PurchaseOrderLine, PurchaseInvoice, PurchaseInvoiceLine
 from .models import Supplier, RawMaterial
-from .forms import PurchaseOrderForm, PurchaseOrderLineForm
+from .forms import PurchaseOrderForm, PurchaseOrderLineForm, PurchaseInvoiceForm, PurchaseInvoiceLineForm
+
 from django.urls import reverse_lazy
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -65,6 +66,32 @@ def get_raw_material_vat_rate(request):
             return JsonResponse({'error': 'Raw material not found'}, status=404)
     return JsonResponse({'error': 'No raw material ID provided'}, status=400)
 
+def purchase_invoice_create(request):
+    if request.method == 'POST':
+        form = PurchaseInvoiceForm(request.POST)
+        if form.is_valid():
+            invoice = form.save()
+            return redirect('raw_materials/purchase_invoice_detail', pk=invoice.pk)
+    else:
+        form = PurchaseInvoiceForm()
+    return render(request, 'raw_materials/create_purchase_invoice.html', {'form': form})
+
+def purchase_invoice_detail(request, pk):
+    invoice = PurchaseInvoice.objects.get(pk=pk)
+    return render(request, 'raw_materials/purchase_invoice_detail.html', {'invoice': invoice})
+
+def purchase_invoice_add_line(request, pk):
+    invoice = PurchaseInvoice.objects.get(pk=pk)
+    if request.method == 'POST':
+        form = PurchaseInvoiceLineForm(request.POST)
+        if form.is_valid():
+            line = form.save(commit=False)
+            line.invoice = invoice
+            line.save()
+            return redirect('raw_materials/purchase_invoice_detail', pk=invoice.pk)
+    else:
+        form = PurchaseInvoiceLineForm()
+    return render(request, 'raw_materials/add_purchase_invoice_line.html', {'form': form})
 
 def home(request):
     return render(request, 'index.html')
