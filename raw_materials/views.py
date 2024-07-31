@@ -5,7 +5,7 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView, D
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
 
-from .models import PurchaseOrder, PurchaseOrderLine
+from .models import PurchaseOrder, PurchaseOrderLine, PurchaseInvoice, PurchaseInvoiceLine
 from .models import Supplier, RawMaterial
 from .forms import PurchaseOrderForm, PurchaseOrderLineForm
 from django.urls import reverse_lazy

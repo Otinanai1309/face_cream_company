@@ -30,8 +30,6 @@ class RawMaterial(models.Model):
         return self.name
 
 class PurchaseOrder(models.Model):
-    # code = models.CharField(max_length=20, unique=False, default=uuid.uuid4)
-
     ORDER_STATES = [
         ('pending', 'Pending'),
         ('completed', 'Completed'),
@@ -74,3 +72,47 @@ class PurchaseOrderLine(models.Model):
 
     def __str__(self):
         return f"Line for {self.raw_material.name} in order {self.purchase_order.code}"
+    
+
+class PurchaseInvoice(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
+    purchase_order_code = models.ForeignKey(PurchaseOrder, null=True, blank=True, on_delete=models.SET_NULL)
+    date_of_invoice = models.DateField()
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        
+
+    def __str__(self):
+        return f"Purchase Invoice #{self.code}"
+    
+class PurchaseInvoiceLine(models.Model):
+    # foreign key referencing the parent PurchaseInvoice instance
+    purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE)
+    
+    raw_material = models.CharField(max_length=50)  # name of the raw material
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)  # quantity of the raw material
+    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)  # price per unit of the raw material
+    
+    cost_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # calculated cost (quantity * price)
+      
+    vat_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # calculated VAT amount
+    
+    
+    @property
+    def cost_amount(self):
+        if self.quantity is not None and self.price_per_unit is not None:
+            return self.quantity * self.price_per_unit
+        return None
+
+    @property
+    def vat_amount(self):
+        if self.cost_amount is not None and self.raw_material.vat_percentage is not None:
+            vat_rate = Decimal(self.raw_material.vat_percentage) / 100
+            return self.cost_amount * vat_rate
+        return None
+
+    
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
