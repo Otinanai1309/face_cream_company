@@ -43,19 +43,28 @@ class PurchaseOrderLineForm(forms.ModelForm):
         self.fields['price'].required = False
         
 class PurchaseInvoiceForm(forms.ModelForm):
+    is_connected_to_order = forms.BooleanField(required=False, label="Connected to Purchase Order?")
+    
     class Meta:
         model = PurchaseInvoice
         fields = ['code', 'supplier', 'purchase_order_code', 'date_of_invoice']
-        widgets = {
-            'code': forms.TextInput(attrs={'class': 'form-control'}),
-            'supplier': forms.Select(attrs={'class': 'form-control'}),
-            'purchase_order_code': forms.Select(attrs={'class': 'form-control'}),
-            'date_of_invoice': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-        }
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['purchase_order_code'].queryset = PurchaseOrder.objects.filter(state__in=['pending', 'partial_pending'])
+        self.fields['purchase_order_code'].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+        is_connected = cleaned_data.get('is_connected_to_order')
+        purchase_order = cleaned_data.get('purchase_order_code')
+        
+        if is_connected and not purchase_order:
+            raise forms.ValidationError("Please select a purchase order.")
+        elif not is_connected:
+            cleaned_data['purchase_order_code'] = None
+        
+        return cleaned_data
 
 
 class PurchaseInvoiceLineForm(forms.ModelForm):

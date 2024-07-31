@@ -1,0 +1,4 @@
+<option value="">---------</option>
+{% for order in purchase_orders %}
+    <option value="{{ order.id }}">{{ order.code }}</option>
+{% endfor %}

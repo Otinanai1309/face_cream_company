@@ -24,7 +24,10 @@ import logging
 
 from django.db import IntegrityError
 from django.db import transaction
+from django.db.models import Sum
 from django.core.exceptions import ValidationError
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,19 +69,44 @@ def get_raw_material_vat_rate(request):
             return JsonResponse({'error': 'Raw material not found'}, status=404)
     return JsonResponse({'error': 'No raw material ID provided'}, status=400)
 
+def update_purchase_order_status(purchase_order, invoice):
+    # Check if all items in the purchase order are fully invoiced
+    order_lines = purchase_order.purchaseorderline_set.all()
+    for line in order_lines:
+        invoiced_quantity = PurchaseInvoiceLine.objects.filter(
+            purchase_invoice__purchase_order_code=purchase_order,
+            raw_material=line.raw_material
+        ).aggregate(total_quantity=Sum('quantity'))['total_quantity'] or 0
+
+        if invoiced_quantity < line.quantity:
+            purchase_order.state = 'partial_pending'
+            purchase_order.save()
+            return
+
+    # If we've made it here, all items are fully invoiced
+    purchase_order.state = 'completed'
+    purchase_order.save()
+
+def get_purchase_orders(request):
+    supplier_id = request.GET.get('supplier_id')
+    purchase_orders = PurchaseOrder.objects.filter(supplier_id=supplier_id, state__in=['pending', 'partial_pending'])
+    return render(request, 'raw_materials/purchase_order_options.html', {'purchase_orders': purchase_orders})
+   
 def purchase_invoice_create(request):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
             invoice = form.save(commit=False)
             # Handle purchase order status update if applicable
-            if invoice.purchase_order:
+            if invoice.purchase_order_code:
                 update_purchase_order_status(invoice.purchase_order, invoice)
             invoice.save()
             return redirect('purchase_invoice_detail', pk=invoice.pk)
     else:
         form = PurchaseInvoiceForm()
-    return render(request, 'raw_materials/create_purchase_invoice.html', {'form': form})
+    
+    suppliers = Supplier.objects.all()
+    return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
 
 
 def purchase_invoice_detail(request, pk):
@@ -96,7 +124,7 @@ def purchase_invoice_add_line(request, pk):
             return redirect('raw_materials/purchase_invoice_detail', pk=invoice.pk)
     else:
         form = PurchaseInvoiceLineForm()
-    return render(request, 'raw_materials/add_purchase_invoice_line.html', {'form': form})
+    return render(request, 'raw_materials/purchase_invoice_add_line.html', {'form': form})
 
 def home(request):
     return render(request, 'index.html')

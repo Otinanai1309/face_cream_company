@@ -4,13 +4,43 @@
     <h1>Create Purchase Invoice</h1>
     <form id="create-purchase-invoice" method="post">
         {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Create</button>
+        <div class="section">
+            <h3>Basic Information</h3>
+            {{ form.code.label_tag }} {{ form.code }}
+            {{ form.is_connected_to_order.label_tag }} {{ form.is_connected_to_order }}
+            {{ form.supplier.label_tag }} {{ form.supplier }}
+            <div id="purchase_order_field" style="display: none;">
+                {{ form.purchase_order_code.label_tag }} {{ form.purchase_order_code }}
+            </div>
+            {{ form.date_of_invoice.label_tag }} {{ form.date_of_invoice }}
+        </div>
+        <!-- Add other sections here -->
+        <button type="submit">Create Invoice</button>
         <div class="alert alert-success" id="success-message" style="display: none;">Purchase invoice created successfully.</div>
     </form>
 
     <script>
         $(document).ready(function() {
+            $('#id_is_connected_to_order').change(function() {
+                if($(this).is(':checked')) {
+                    $('#purchase_order_field').show();
+                } else {
+                    $('#purchase_order_field').hide();
+                }
+            });
+        
+            $('#id_supplier').change(function() {
+                var supplier_id = $(this).val();
+                $.ajax({
+                    url: '{% url "get_purchase_orders" %}',
+                    data: {
+                        'supplier_id': supplier_id
+                    },
+                    success: function(data) {
+                        $('#id_purchase_order_code').html(data);
+                    }
+                });
+            });
             $('#create-purchase-invoice').validate({
                 rules: {
                     date_of_invoice: "required",
@@ -58,7 +88,7 @@
                 var line_form = $('#purchase_invoice_line_form');
                 $.ajax({
                     type: "POST",
-                    url: "{% url 'purchase_invoice_add_line' %}",
+                    url: "{% url 'purchase_invoice_add_line_no_pk' %}",
                     data: line_form.serialize(),
                     success: function(response) {
                         if (response.result === 'success') {

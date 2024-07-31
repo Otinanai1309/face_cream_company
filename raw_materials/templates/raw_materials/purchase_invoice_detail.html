@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1>Purchase Invoice Detail</h1>
+<p>Code: {{ invoice.code }}</p>
+<p>Supplier: {{ invoice.supplier }}</p>
+<p>Date: {{ invoice.date_of_invoice }}</p>
+<!-- Add more fields as needed -->
+{% endblock %}
