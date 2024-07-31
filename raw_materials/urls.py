@@ -53,7 +53,7 @@ urlpatterns = [
     path('purchase-orders/<int:pk>/update/', PurchaseOrderUpdateView.as_view(), name='purchaseorder_update'),
     path('purchase-orders/<int:pk>/delete/', PurchaseOrderDeleteView.as_view(), name='purchaseorder_delete'),
     
-    path('api/purchase-invoice/', purchase_invoice_create, name='purchase_invoice_create'),
+    path('api/purchase-invoice/create/', purchase_invoice_create, name='purchase_invoice_create'),
     path('api/purchase-invoice/<pk>/', purchase_invoice_detail, name='purchase_invoice_detail'),
     path('api/purchase-invoice/<pk>/line/', purchase_invoice_add_line, name='purchase_invoice_add_line'),
 ]

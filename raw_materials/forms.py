@@ -47,10 +47,28 @@ class PurchaseInvoiceForm(forms.ModelForm):
         model = PurchaseInvoice
         fields = ['code', 'supplier', 'purchase_order_code', 'date_of_invoice']
         widgets = {
-            'date_of_invoice': forms.DateInput(attrs={'type': 'date'}),
+            'code': forms.TextInput(attrs={'class': 'form-control'}),
+            'supplier': forms.Select(attrs={'class': 'form-control'}),
+            'purchase_order_code': forms.Select(attrs={'class': 'form-control'}),
+            'date_of_invoice': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['purchase_order_code'].queryset = PurchaseOrder.objects.filter(state__in=['pending', 'partial_pending'])
+
 
 class PurchaseInvoiceLineForm(forms.ModelForm):
     class Meta:
         model = PurchaseInvoiceLine
-        fields = ['purchase_invoice', 'raw_material', 'quantity', 'price_per_unit']
+        fields = ['raw_material', 'quantity', 'price_per_unit']
+        widgets = {
+            'raw_material': forms.Select(attrs={'class': 'form-control'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control'}),
+            'price_per_unit': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'instance' in kwargs and kwargs['instance']:
+            self.fields['raw_material'].queryset = RawMaterial.objects.filter(suppliers=kwargs['instance'].purchase_invoice.supplier)

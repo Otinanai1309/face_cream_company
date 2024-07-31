@@ -70,11 +70,16 @@ def purchase_invoice_create(request):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
-            invoice = form.save()
-            return redirect('raw_materials/purchase_invoice_detail', pk=invoice.pk)
+            invoice = form.save(commit=False)
+            # Handle purchase order status update if applicable
+            if invoice.purchase_order:
+                update_purchase_order_status(invoice.purchase_order, invoice)
+            invoice.save()
+            return redirect('purchase_invoice_detail', pk=invoice.pk)
     else:
         form = PurchaseInvoiceForm()
     return render(request, 'raw_materials/create_purchase_invoice.html', {'form': form})
+
 
 def purchase_invoice_detail(request, pk):
     invoice = PurchaseInvoice.objects.get(pk=pk)
