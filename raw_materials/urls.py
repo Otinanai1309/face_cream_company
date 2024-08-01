@@ -10,7 +10,7 @@ from .views import (
 from rest_framework.routers import DefaultRouter
 from .views import SupplierViewSet, RawMaterialViewSet, PurchaseOrderViewSet, PurchaseOrderLineViewSet
 from .views import get_raw_materials, update_raw_material_price, get_raw_material_price, get_raw_material_vat_rate
-from .views import purchase_invoice_create, purchase_invoice_detail, purchase_invoice_add_line, get_purchase_orders
+from .views import purchase_invoice_create, purchase_invoice_detail, purchase_invoice_add_line, get_purchase_orders, get_purchase_order_lines
 
 from django.views.generic import TemplateView
 from django.contrib import admin
@@ -54,7 +54,8 @@ urlpatterns = [
     path('purchase-orders/<int:pk>/delete/', PurchaseOrderDeleteView.as_view(), name='purchaseorder_delete'),
     
     path('get-purchase-orders/', get_purchase_orders, name='get_purchase_orders'),
-
+    path('get-purchase-order-lines/', get_purchase_order_lines, name='get_purchase_order_lines'),
+   
     path('purchase-invoice/create/', purchase_invoice_create, name='purchase_invoice_create'),
     path('purchase-invoice/<pk>/', purchase_invoice_detail, name='purchase_invoice_detail'),
     path('purchase-invoice/<int:pk>/line/', purchase_invoice_add_line, name='purchase_invoice_add_line'),

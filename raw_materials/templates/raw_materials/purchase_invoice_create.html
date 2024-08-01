@@ -1,108 +1,252 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
 {% block content %}
-    <h1>Create Purchase Invoice</h1>
-    <form id="create-purchase-invoice" method="post">
-        {% csrf_token %}
-        <div class="section">
-            <h3>Basic Information</h3>
-            {{ form.code.label_tag }} {{ form.code }}
-            {{ form.is_connected_to_order.label_tag }} {{ form.is_connected_to_order }}
-            {{ form.supplier.label_tag }} {{ form.supplier }}
-            <div id="purchase_order_field" style="display: none;">
-                {{ form.purchase_order_code.label_tag }} {{ form.purchase_order_code }}
-            </div>
-            {{ form.date_of_invoice.label_tag }} {{ form.date_of_invoice }}
+<h2>{% if object %}Update{% else %}Create{% endif %} Purchase Invoice</h2>
+<form method="post" action="{% url 'purchase_invoice_create' %}" id="purchase-invoice-form">
+    {% csrf_token %}
+    <div class="form-section">
+        <div class="form-row">
+            <label for="id_code">Code:</label>
+            {{ form.code }}
         </div>
-        <!-- Add other sections here -->
-        <button type="submit">Create Invoice</button>
-        <div class="alert alert-success" id="success-message" style="display: none;">Purchase invoice created successfully.</div>
-    </form>
+        <div class="form-row">
+            <label for="id_supplier">Supplier:</label>
+            {{ form.supplier }}
+        </div>
+        <div class="form-row">
+            <label for="id_date_of_invoice">Date of Invoice:</label>
+            <input type="date" id="id_date_of_invoice" name="date_of_invoice" required>
+        </div>
+        <div class="form-row">
+            <label for="id_connection_with_order">Connection with Order:</label>
+            <input type="checkbox" id="id_connection_with_order" name="connection_with_order">
+        </div>
+        <div class="form-row" id="purchase_order_row" style="display: none;">
+            <label for="id_purchase_order_code">Purchase Order:</label>
+            <select id="id_purchase_order_code" name="purchase_order_code">
+                <option value="">Select a Purchase Order</option>
+            </select>
+        </div>
+    </div>
 
-    <script>
-        $(document).ready(function() {
-            $('#id_is_connected_to_order').change(function() {
-                if($(this).is(':checked')) {
-                    $('#purchase_order_field').show();
-                } else {
-                    $('#purchase_order_field').hide();
-                }
-            });
+    <div class="form-section">
+        <h3>Invoice Lines</h3>
+        <table id="invoice-lines">
+            <thead>
+                <tr>
+                    <th>Raw Material</th>
+                    <th>Quantity</th>
+                    <th>Price per Unit</th>
+                    <th>Cost Amount</th>
+                    <th>VAT Amount</th>
+                    <th>Total Cost</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="invoice-lines-body">
+                <!-- Invoice lines will be dynamically added here -->
+            </tbody>
+        </table>
+    </div>
+
+    <div class="form-section">
+        <h3>Totals</h3>
+        <p>Total Cost: <span id="total-cost">0.00</span></p>
+        <p>Total VAT: <span id="total-vat">0.00</span></p>
+        <p>Grand Total: <span id="grand-total">0.00</span></p>
+    </div>
+
+    <button type="submit" id="submit-button">Save Invoice</button>
+</form>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    const connectionCheckbox = $('#id_connection_with_order');
+    const purchaseOrderRow = $('#purchase_order_row');
+    const purchaseOrderSelect = $('#id_purchase_order_code');
+    const invoiceLinesBody = $('#invoice-lines-body');
+
+    connectionCheckbox.change(function() {
+        if (this.checked) {
+            purchaseOrderRow.show();
+            loadPendingPurchaseOrders();
+        } else {
+            purchaseOrderRow.hide();
+            purchaseOrderSelect.val('');
+            clearInvoiceLines();
+        }
+    });
+
+    purchaseOrderSelect.change(function() {
+        if (this.value) {
+            loadPurchaseOrderLines(this.value);
+        } else {
+            clearInvoiceLines();
+        }
+    });
+
+    function loadPendingPurchaseOrders() {
+        $.ajax({
+            url: "{% url 'get_purchase_orders' %}",
+            data: { 'supplier_id': $('#id_supplier').val() },
+            success: function(data) {
+                purchaseOrderSelect.empty();
+                purchaseOrderSelect.append($('<option>', {
+                    value: '',
+                    text: 'Select a Purchase Order'
+                }));
+                $.each(data, function(index, item) {
+                    purchaseOrderSelect.append($('<option>', {
+                        value: item.id,
+                        text: item.code
+                    }));
+                });
+            }
+        });
+    }
+
+    function loadPurchaseOrderLines(purchaseOrderId) {
+        $.ajax({
+            url: "{% url 'get_purchase_order_lines' %}",
+            data: { 'purchase_order_id': purchaseOrderId },
+            success: function(data) {
+                clearInvoiceLines();
+                $.each(data, function(index, item) {
+                    addInvoiceLine(item);
+                });
+                calculateTotals();
+            }
+        });
+    }
+
+    function addInvoiceLine(item) {
+        const newRow = $('<tr>');
+        newRow.append($('<td>').text(item.raw_material));
+        newRow.append($('<td>').append($('<input>', {
+            type: 'number',
+            name: 'quantity',
+            value: item.quantity,
+            min: 0,
+            max: item.quantity,
+            step: 0.01,
+            class: 'quantity-input'
+        })));
+        newRow.append($('<td>').text(item.price_per_unit));
+        newRow.append($('<td>').addClass('cost-amount'));
+        newRow.append($('<td>').addClass('vat-amount'));
+        newRow.append($('<td>').addClass('total-cost'));
+        newRow.append($('<td>').append($('<button>', {
+            type: 'button',
+            class: 'delete-line',
+            text: 'Delete',
+            css: {
+                'background-color': 'red',
+                'color': 'white'
+            }
+        })));
+        newRow.data('vat-rate', item.vat_rate);
+        invoiceLinesBody.append(newRow);
+    }
+    
+
+    function clearInvoiceLines() {
+        invoiceLinesBody.empty();
+    }
+
+    function calculateTotals() {
+        let totalCost = 0;
+        let totalVAT = 0;
+        $('#invoice-lines-body tr').each(function() {
+            const quantity = parseFloat($(this).find('.quantity-input').val()) || 0;
+            const price = parseFloat($(this).find('td:eq(2)').text()) || 0;
+            const vatRate = parseFloat($(this).data('vat-rate')) || 0;
+            const cost = quantity * price;
+            const vat = cost * vatRate;
+            const totalLineCost = cost + vat;
+    
+            $(this).find('.cost-amount').text(cost.toFixed(2));
+            $(this).find('.vat-amount').text(vat.toFixed(2));
+            $(this).find('.total-cost').text(totalLineCost.toFixed(2));
+    
+            totalCost += cost;
+            totalVAT += vat;
+        });
+    
+        $('#total-cost').text(totalCost.toFixed(2));
+        $('#total-vat').text(totalVAT.toFixed(2));
+        $('#grand-total').text((totalCost + totalVAT).toFixed(2));
+    }
+
+    $(document).on('input', '.quantity-input', calculateTotals);
+    $(document).on('click', '.delete-line', function() {
+        $(this).closest('tr').remove();
+        calculateTotals();
+    });
+
+    $('#purchase-invoice-form').submit(function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
         
-            $('#id_supplier').change(function() {
-                var supplier_id = $(this).val();
-                $.ajax({
-                    url: '{% url "get_purchase_orders" %}',
-                    data: {
-                        'supplier_id': supplier_id
-                    },
-                    success: function(data) {
-                        $('#id_purchase_order_code').html(data);
-                    }
-                });
-            });
-            $('#create-purchase-invoice').validate({
-                rules: {
-                    date_of_invoice: "required",
-                    total_cost: "required",
-                    supplier: "required",
-                    payment_terms: "required"
-                },
-                messages: {
-                    date_of_invoice: "",
-                    total_cost: "",
-                    supplier: "",
-                    payment_terms: ""
-                },
-                highlight: function(element, errorClass) {
-                    $(element).addClass("is-invalid");
-                },
-                unhighlight: function(element, errorClass) {
-                    $(element).removeClass("is-invalid");
-                }
-            });
-
-            $('#create-purchase-invoice').submit(function(event) {
-                event.preventDefault();
-                var form = $(this);
-                $.ajax({
-                    type: "POST",
-                    url: "{% url 'purchase_invoice_create' %}",
-                    data: form.serialize(),
-                    success: function(response) {
-                        if (response.result === 'success') {
-                            $('#success-message').show().delay(2000).fadeOut();
-                            setTimeout(function() { window.location.href = response.redirect; }, 2500);
-                        } else {
-                            alert('Error creating purchase invoice');
-                        }
-                    },
-                    error: function(xhr, status) {
-                        console.log("error");
-                    }
-                });
-            });
-
-            $('#add-purchase-invoice-line').click(function(event) {
-                event.preventDefault();
-                var line_form = $('#purchase_invoice_line_form');
-                $.ajax({
-                    type: "POST",
-                    url: "{% url 'purchase_invoice_add_line_no_pk' %}",
-                    data: line_form.serialize(),
-                    success: function(response) {
-                        if (response.result === 'success') {
-                            $('#line-added-message').show().delay(2000).fadeOut();
-                            setTimeout(function() { window.location.href = response.redirect; }, 2500);
-                        } else {
-                            alert('Error adding purchase invoice line');
-                        }
-                    },
-                    error: function(xhr, status) {
-                        console.log("error");
-                    }
-                });
+        // Add invoice lines data
+        const invoiceLines = [];
+        $('#invoice-lines-body tr').each(function() {
+            invoiceLines.push({
+                raw_material: $(this).find('td:eq(0)').text(),
+                quantity: $(this).find('.quantity-input').val(),
+                price_per_unit: $(this).find('td:eq(2)').text(),
+                cost_amount: $(this).find('.cost-amount').text(),
+                vat_amount: $(this).find('.vat-amount').text(),
+                total_cost: $(this).find('.total-cost').text()
             });
         });
-    </script>
+        formData.append('invoice_lines', JSON.stringify(invoiceLines));
+    
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    window.location.href = response.redirect_url;
+                } else {
+                    alert('Error saving invoice: ' + response.error);
+                }
+            },
+            error: function() {
+                alert('An error occurred while saving the invoice.');
+            }
+        });
+    });
+    
+});
+</script>
+
+<style>
+.form-section {
+    margin-bottom: 20px;
+}
+.form-row {
+    margin-bottom: 10px;
+}
+#invoice-lines {
+    width: 100%;
+    border-collapse: collapse;
+}
+#invoice-lines th, #invoice-lines td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+#invoice-lines th {
+    background-color: #f2f2f2;
+}
+.error-message {
+    color: red;
+    font-size: 0.8em;
+    display: block;
+    margin-top: 5px;
+}
+</style>
 {% endblock %}

@@ -1,4 +1,5 @@
 # views.py
+import json
 from django import forms
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
@@ -27,7 +28,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.core.exceptions import ValidationError
 
-
+from django.urls import reverse
 
 logger = logging.getLogger(__name__)
 
@@ -90,23 +91,48 @@ def update_purchase_order_status(purchase_order, invoice):
 def get_purchase_orders(request):
     supplier_id = request.GET.get('supplier_id')
     purchase_orders = PurchaseOrder.objects.filter(supplier_id=supplier_id, state__in=['pending', 'partial_pending'])
-    return render(request, 'raw_materials/purchase_order_options.html', {'purchase_orders': purchase_orders})
+    return JsonResponse(list(purchase_orders.values('id', 'code')), safe=False)
+
+def get_purchase_order_lines(request):
+    purchase_order_id = request.GET.get('purchase_order_id')
+    purchase_order_lines = PurchaseOrderLine.objects.filter(purchase_order_id=purchase_order_id)
+    lines_data = [
+        {
+            'raw_material': line.raw_material.name,
+            'quantity': line.quantity,
+            'price_per_unit': str(line.price),
+            'vat_rate': float(line.raw_material.get_vat_rate())
+        }
+        for line in purchase_order_lines
+    ]
+    return JsonResponse(lines_data, safe=False)
    
+@transaction.atomic
 def purchase_invoice_create(request):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
-            invoice = form.save(commit=False)
-            # Handle purchase order status update if applicable
+            invoice = form.save()
+            invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
+            for line_data in invoice_lines:
+                PurchaseInvoiceLine.objects.create(
+                    purchase_invoice=invoice,
+                    raw_material=line_data['raw_material'],
+                    quantity=Decimal(line_data['quantity']),
+                    price_per_unit=Decimal(line_data['price_per_unit'])
+                )
             if invoice.purchase_order_code:
-                update_purchase_order_status(invoice.purchase_order, invoice)
-            invoice.save()
-            return redirect('purchase_invoice_detail', pk=invoice.pk)
+                update_purchase_order_status(invoice.purchase_order_code, invoice)
+            return JsonResponse({
+                'success': True,
+                'redirect_url': reverse('purchase_invoice_detail', kwargs={'pk': invoice.pk})
+            })
+        else:
+            return JsonResponse({'success': False, 'errors': form.errors})
     else:
         form = PurchaseInvoiceForm()
-    
-    suppliers = Supplier.objects.all()
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
+
 
 
 def purchase_invoice_detail(request, pk):
