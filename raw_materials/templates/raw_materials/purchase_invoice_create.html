@@ -121,7 +121,9 @@ $(document).ready(function() {
     }
 
     function addInvoiceLine(item) {
-        const newRow = $('<tr>');
+        const newRow = $('<tr>', {
+            'data-order-line-id': item.id
+        });
         newRow.append($('<td>').text(item.raw_material));
         newRow.append($('<td>').append($('<input>', {
             type: 'number',
@@ -192,12 +194,12 @@ $(document).ready(function() {
         const invoiceLines = [];
         $('#invoice-lines-body tr').each(function() {
             invoiceLines.push({
+                order_line_id: $(this).data('order-line-id'),
                 raw_material: $(this).find('td:eq(0)').text(),
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('td:eq(2)').text(),
                 cost_amount: $(this).find('.cost-amount').text(),
-                vat_amount: $(this).find('.vat-amount').text(),
-                total_cost: $(this).find('.total-cost').text()
+                vat_amount: $(this).find('.vat-amount').text()
             });
         });
         formData.append('invoice_lines', JSON.stringify(invoiceLines));
@@ -212,7 +214,7 @@ $(document).ready(function() {
                 if (response.success) {
                     window.location.href = response.redirect_url;
                 } else {
-                    alert('Error saving invoice: ' + response.error);
+                    alert('Error saving invoice: ' + JSON.stringify(response.errors));
                 }
             },
             error: function() {
@@ -220,6 +222,7 @@ $(document).ready(function() {
             }
         });
     });
+    
     
 });
 </script>

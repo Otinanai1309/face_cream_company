@@ -55,6 +55,14 @@ class PurchaseOrderLine(models.Model):
     quantity = models.IntegerField(null=True, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     vat = models.DecimalField(max_digits=10, decimal_places=2, editable=False, null=True, blank=True)
+    invoiced_quantity = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    STATE_CHOICES = [
+        ('pending', 'Pending'),
+        ('partial', 'Partially Fulfilled'),
+        ('fulfilled', 'Fulfilled'),
+    ]
+    state = models.CharField(max_length=20, choices=STATE_CHOICES, default='pending')
 
     @property
     def cost(self):
