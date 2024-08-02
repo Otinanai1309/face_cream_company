@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Purchase Invoices</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Code</th>
+            <th>Supplier</th>
+            <th>Date</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+        <tr>
+            <td>{{ invoice.code }}</td>
+            <td>{{ invoice.supplier.name }}</td>
+            <td>{{ invoice.date_of_invoice }}</td>
+            <td>
+                <a href="{% url 'purchase_invoice_edit' invoice.id %}">Edit</a>
+                <a href="{% url 'purchase_invoice_delete' invoice.id %}">Delete</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

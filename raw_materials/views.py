@@ -141,30 +141,38 @@ def purchase_invoice_create(request):
             invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
             all_lines_fulfilled = True
             for line_data in invoice_lines:
-                order_line = PurchaseOrderLine.objects.get(id=line_data['order_line_id'])
+                raw_material = RawMaterial.objects.get(id=line_data['raw_material'])
                 invoiced_quantity = Decimal(line_data['quantity'])
                 
                 PurchaseInvoiceLine.objects.create(
                     purchase_invoice=invoice,
-                    raw_material=order_line.raw_material,
+                    raw_material=raw_material,
                     quantity=invoiced_quantity,
                     price_per_unit=Decimal(line_data['price_per_unit'])
                 )
                 
-                order_line.invoiced_quantity += invoiced_quantity
-                if order_line.invoiced_quantity >= order_line.quantity:
-                    order_line.state = 'fulfilled'
-                else:
-                    order_line.state = 'partial'
-                    all_lines_fulfilled = False
-                order_line.save()
+                if purchase_order_id:
+                    order_line = PurchaseOrderLine.objects.filter(
+                        purchase_order_id=purchase_order_id,
+                        raw_material=raw_material
+                    ).first()
+                    
+                    if order_line:
+                        order_line.invoiced_quantity += invoiced_quantity
+                        if order_line.invoiced_quantity >= order_line.quantity:
+                            order_line.state = 'fulfilled'
+                        else:
+                            order_line.state = 'partial'
+                            all_lines_fulfilled = False
+                        order_line.save()
 
-            if invoice.purchase_order_code:
+            if purchase_order_id:
+                purchase_order = PurchaseOrder.objects.get(id=purchase_order_id)
                 if all_lines_fulfilled:
-                    invoice.purchase_order_code.state = 'completed'
+                    purchase_order.state = 'completed'
                 else:
-                    invoice.purchase_order_code.state = 'partial_pending'
-                invoice.purchase_order_code.save()
+                    purchase_order.state = 'partial_pending'
+                purchase_order.save()
 
             return JsonResponse({
                 'success': True,
@@ -177,7 +185,11 @@ def purchase_invoice_create(request):
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
 
 
-
+def get_supplier_raw_materials(request):
+    supplier_id = request.GET.get('supplier_id')
+    raw_materials = RawMaterial.objects.filter(suppliers__id=supplier_id)
+    data = [{'id': rm.id, 'name': rm.name, 'vat_rate': float(rm.get_vat_rate())} for rm in raw_materials]
+    return JsonResponse(data, safe=False)
 
 
 def purchase_invoice_detail(request, pk):
@@ -200,6 +212,24 @@ def purchase_invoice_add_line(request, pk):
 def home(request):
     return render(request, 'index.html')
 
+class PurchaseInvoiceListView(ListView):
+    model = PurchaseInvoice
+    template_name = 'raw_materials/purchase_invoice_list.html'
+    context_object_name = 'invoices'
+
+class PurchaseInvoiceEditView(UpdateView):
+    model = PurchaseInvoice
+    form_class = PurchaseInvoiceForm
+    template_name = 'raw_materials/purchase_invoice_edit.html'
+    
+    def get_success_url(self):
+        return reverse_lazy('purchase_invoice_list')
+
+class PurchaseInvoiceDeleteView(DeleteView):
+    model = PurchaseInvoice
+    success_url = reverse_lazy('purchase_invoice_list')
+    template_name = 'raw_materials/purchase_invoice_confirm_delete.html'
+    
 class IndexView(TemplateView):
     template_name = "index.html"
     

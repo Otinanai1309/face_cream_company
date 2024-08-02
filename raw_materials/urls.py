@@ -10,7 +10,8 @@ from .views import (
 from rest_framework.routers import DefaultRouter
 from .views import SupplierViewSet, RawMaterialViewSet, PurchaseOrderViewSet, PurchaseOrderLineViewSet
 from .views import get_raw_materials, update_raw_material_price, get_raw_material_price, get_raw_material_vat_rate
-from .views import purchase_invoice_create, purchase_invoice_detail, purchase_invoice_add_line, get_purchase_orders, get_purchase_order_lines
+from .views import purchase_invoice_create, purchase_invoice_detail, purchase_invoice_add_line, get_purchase_orders, get_purchase_order_lines, get_supplier_raw_materials
+from .views import PurchaseInvoiceListView, PurchaseInvoiceEditView, PurchaseInvoiceDeleteView
 
 from django.views.generic import TemplateView
 from django.contrib import admin
@@ -60,5 +61,9 @@ urlpatterns = [
     path('purchase-invoice/<pk>/', purchase_invoice_detail, name='purchase_invoice_detail'),
     path('purchase-invoice/<int:pk>/line/', purchase_invoice_add_line, name='purchase_invoice_add_line'),
     path('purchase-invoice/line/', purchase_invoice_add_line, name='purchase_invoice_add_line_no_pk'),
+    path('get-supplier-raw-materials/', get_supplier_raw_materials, name='get_supplier_raw_materials'),
+    path('purchase-invoices/', PurchaseInvoiceListView.as_view(), name='purchase_invoice_list'),
+    path('purchase-invoice/<int:pk>/edit/', PurchaseInvoiceEditView.as_view(), name='purchase_invoice_edit'),
+    path('purchase-invoice/<int:pk>/delete/', PurchaseInvoiceDeleteView.as_view(), name='purchase_invoice_delete'),
 
 ]
