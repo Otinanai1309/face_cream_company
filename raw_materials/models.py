@@ -90,8 +90,13 @@ class PurchaseInvoice(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        
+        self.update_stock()
 
+    def update_stock(self):
+        for line in self.purchaseinvoiceline_set.all():
+            line.raw_material.stock += line.quantity
+            line.raw_material.save()
+            
     def __str__(self):
         return f"Purchase Invoice #{self.code}"
     
@@ -99,7 +104,7 @@ class PurchaseInvoiceLine(models.Model):
     # foreign key referencing the parent PurchaseInvoice instance
     purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE)
     
-    raw_material = models.CharField(max_length=50)  # name of the raw material
+    raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)  # name of the raw material
     quantity = models.DecimalField(max_digits=10, decimal_places=2)  # quantity of the raw material
     price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)  # price per unit of the raw material
     

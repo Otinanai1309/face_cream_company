@@ -178,10 +178,11 @@ def purchase_invoice_create(request):
                         logger.info(f"Created invoice line: {invoice_line.id}")
                     
                         if purchase_order_id:
-                            order_line = PurchaseOrderLine.objects.filter(
+                            order_line = PurchaseOrderLine.objects.get(
+                                id=line_data.get('order_line_id'),
                                 purchase_order_id=purchase_order_id,
                                 raw_material=raw_material
-                            ).first()
+                            )
                             
                             if order_line:
                                 order_line.invoiced_quantity += quantity
@@ -190,6 +191,12 @@ def purchase_invoice_create(request):
                     except RawMaterial.DoesNotExist:
                         logger.error(f"Raw material with id {raw_material_id} does not exist")
                         return JsonResponse({'success': False, 'errors': f'Raw material with id {raw_material_id} does not exist'})
+                    except PurchaseOrderLine.DoesNotExist:
+                        logger.error(f"Purchase order line not found for raw material {raw_material_id}")
+                        return JsonResponse({'success': False, 'errors': f'Purchase order line not found for raw material {raw_material_id}'})
+
+            invoice.update_stock()
+            logger.info("Updated raw material stock")
 
             if purchase_order_id:
                 logger.info(f"Updating order statuses for order: {purchase_order_id}")

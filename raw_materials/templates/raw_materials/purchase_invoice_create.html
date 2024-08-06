@@ -394,6 +394,7 @@ $(document).ready(function() {
                 raw_material: rowData.rawMaterialId, // Ensure this is the correct ID
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('.price-input').val(),
+                order_line_id: rowData.orderLineId
             });
         });
         console.log('Prepared invoice lines:', invoiceLines);
