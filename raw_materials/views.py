@@ -126,64 +126,86 @@ def update_purchase_order_line_status(order_line, invoiced_quantity):
 
     order_line.invoiced_quantity = new_total_invoiced
     order_line.save()
-   
-@transaction.atomic
+
+def update_order_statuses(purchase_order_id):
+    order = PurchaseOrder.objects.get(id=purchase_order_id)
+    lines = order.purchaseorderline_set.all()
+    all_fulfilled = True
+    for line in lines:
+        if line.invoiced_quantity >= line.quantity:
+            line.state = 'fulfilled'
+        else:
+            line.state = 'partial'
+            all_fulfilled = False
+        line.save()
+    order.state = 'completed' if all_fulfilled else 'partial_pending'
+    order.save()
+       
+# @transaction.atomic
 def purchase_invoice_create(request):
     if request.method == 'POST':
+        logger.info("Received POST request for purchase invoice creation")
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
+            logger.info("Form is valid")
             invoice = form.save(commit=False)
             purchase_order_id = request.POST.get('purchase_order_code')
+            logger.info(f"Purchase order ID: {purchase_order_id}")
             if purchase_order_id:
                 invoice.purchase_order_code_id = purchase_order_id
             invoice.save()
+            logger.info(f"Invoice created with ID: {invoice.id}")
 
             invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
-            all_lines_fulfilled = True
+            logger.info(f"Number of invoice lines: {len(invoice_lines)}")
+            logger.info(f"invoice lines: {invoice_lines}")
             for line_data in invoice_lines:
-                raw_material = RawMaterial.objects.get(id=line_data['raw_material'])
-                invoiced_quantity = Decimal(line_data['quantity'])
-                
-                PurchaseInvoiceLine.objects.create(
-                    purchase_invoice=invoice,
-                    raw_material=raw_material,
-                    quantity=invoiced_quantity,
-                    price_per_unit=Decimal(line_data['price_per_unit'])
-                )
-                
-                if purchase_order_id:
-                    order_line = PurchaseOrderLine.objects.filter(
-                        purchase_order_id=purchase_order_id,
-                        raw_material=raw_material
-                    ).first()
+                logger.debug(f"Processing line data: {line_data}")
+                raw_material_id = line_data.get('raw_material')
+                if raw_material_id:
+                    try:
+                        raw_material = RawMaterial.objects.get(id=raw_material_id)
+                        logger.info(f"Raw material: {raw_material}")
+                        quantity = Decimal(line_data['quantity'])
+                        
+                        invoice_line = PurchaseInvoiceLine.objects.create(
+                            purchase_invoice=invoice,
+                            raw_material=raw_material,
+                            quantity=quantity,
+                            price_per_unit=Decimal(line_data['price_per_unit'])
+                        )
+                        logger.info(f"Created invoice line: {invoice_line.id}")
                     
-                    if order_line:
-                        order_line.invoiced_quantity += invoiced_quantity
-                        if order_line.invoiced_quantity >= order_line.quantity:
-                            order_line.state = 'fulfilled'
-                        else:
-                            order_line.state = 'partial'
-                            all_lines_fulfilled = False
-                        order_line.save()
+                        if purchase_order_id:
+                            order_line = PurchaseOrderLine.objects.filter(
+                                purchase_order_id=purchase_order_id,
+                                raw_material=raw_material
+                            ).first()
+                            
+                            if order_line:
+                                order_line.invoiced_quantity += quantity
+                                order_line.save()
+                                logger.info(f"Updated order line: {order_line.id}")
+                    except RawMaterial.DoesNotExist:
+                        logger.error(f"Raw material with id {raw_material_id} does not exist")
+                        return JsonResponse({'success': False, 'errors': f'Raw material with id {raw_material_id} does not exist'})
 
             if purchase_order_id:
-                purchase_order = PurchaseOrder.objects.get(id=purchase_order_id)
-                if all_lines_fulfilled:
-                    purchase_order.state = 'completed'
-                else:
-                    purchase_order.state = 'partial_pending'
-                purchase_order.save()
+                logger.info(f"Updating order statuses for order: {purchase_order_id}")
+                update_order_statuses(purchase_order_id)
 
+            logger.info("Purchase invoice creation completed successfully")
             return JsonResponse({
                 'success': True,
                 'redirect_url': reverse('purchase_invoice_detail', kwargs={'pk': invoice.pk})
             })
         else:
+            logger.error(f"Form validation failed. Errors: {form.errors}")
             return JsonResponse({'success': False, 'errors': form.errors})
     else:
+        logger.info("Received GET request for purchase invoice creation")
         form = PurchaseInvoiceForm()
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
-
 
 def get_supplier_raw_materials(request):
     supplier_id = request.GET.get('supplier_id')

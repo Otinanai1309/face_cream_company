@@ -113,44 +113,59 @@ $(document).ready(function() {
             url: "{% url 'get_purchase_order_lines' %}",
             data: { 'purchase_order_id': purchaseOrderId },
             success: function(data) {
+                console.log('Received purchase order lines:', data);
                 clearInvoiceLines();
                 $.each(data, function(index, item) {
-                    addInvoiceLine(item);
+                    const remainingQuantity = item.quantity - item.invoiced_quantity;
+                    addInvoiceLine({
+                        ...item,
+                        quantity: remainingQuantity,
+                        raw_material_id: item.raw_material // Ensure this is included in the API response
+                    });
                 });
                 calculateTotals();
             }
         });
     }
+    
+    
+    
 
     function addInvoiceLine(item) {
+        console.log('Adding invoice line:', item);
         const newRow = $('<tr>', {
-            'data-order-line-id': item.id
+            'data-order-line-id': item.id,
+            'data-raw-material-id': item.raw_material_id
         });
         newRow.append($('<td>').text(item.raw_material));
         newRow.append($('<td>').append($('<input>', {
             type: 'number',
             name: 'quantity',
-            value: item.quantity,
+            value: item.remaining_quantity,
             min: 0,
-            max: item.quantity,
+            max: item.remaining_quantity,
             step: 0.01,
             class: 'quantity-input'
         })));
-        newRow.append($('<td>').text(item.price_per_unit));
+        newRow.append($('<td>').append($('<input>', {
+            type: 'number',
+            name: 'price_per_unit',
+            value: item.price_per_unit,
+            step: 0.01,
+            class: 'price-input'
+        })));
         newRow.append($('<td>').addClass('cost-amount'));
         newRow.append($('<td>').addClass('vat-amount'));
         newRow.append($('<td>').addClass('total-cost'));
         newRow.append($('<td>').append($('<button>', {
             type: 'button',
             class: 'delete-line',
-            text: 'Delete',
-            css: {
-                'background-color': 'red',
-                'color': 'white'
-            }
+            text: 'Delete'
         })));
         newRow.data('vat-rate', item.vat_rate);
         invoiceLinesBody.append(newRow);
+        calculateLineTotals(newRow);
+        console.log('Added row:', newRow.data());
     }
     
 
@@ -213,8 +228,7 @@ $(document).ready(function() {
             name: 'raw_material',
             class: 'raw-material-select'
         });
-        // Populate with raw materials for the selected supplier
-        // You'll need to implement this part
+        
         return select;
     }
     
@@ -271,10 +285,11 @@ $(document).ready(function() {
         }
     }
     
+    
     function handlePriceChange(priceInput) {
         var newPrice = $(priceInput).val();
         var originalPrice = $(priceInput).data('original-price');
-        if (newPrice != originalPrice) {
+        if (Math.abs(parseFloat(newPrice) - parseFloat(originalPrice)) > 0.001) {
             if (confirm('The price has changed. Do you want to update the price in the database?')) {
                 var rawMaterialId = $(priceInput).closest('tr').find('.raw-material-select').val();
                 $.ajax({
@@ -305,9 +320,9 @@ $(document).ready(function() {
 
     function calculateLineTotals(row) {
         var quantity = parseFloat(row.find('.quantity-input').val()) || 0;
-    var price = parseFloat(row.find('.price-input').val()) || 0;
-    var vatRate = parseFloat(row.data('vat-rate')) || 0;
-    
+        var price = parseFloat(row.find('.price-input').val()) || 0;
+        var vatRate = parseFloat(row.data('vat-rate')) || 0;
+        
         var costAmount = quantity * price;
         var vatAmount = costAmount * vatRate;
         var totalCost = costAmount + vatAmount;
@@ -361,10 +376,7 @@ $(document).ready(function() {
         calculateLineTotals($(this).closest('tr'));
     });
 
-    $(document).on('input', '.quantity-input, .price-input', function() {
-        calculateLineTotals($(this).closest('tr'));
-    });
-    
+        
     $('.raw-material-select').change(function() {
         updatePrice(this);
         calculateLineTotals($(this).closest('tr'));
@@ -373,22 +385,19 @@ $(document).ready(function() {
     $('#purchase-invoice-form').submit(function(e) {
         e.preventDefault();
         const formData = new FormData(this);
-        
-        // Add invoice lines data
         const invoiceLines = [];
         $('#invoice-lines-body tr').each(function() {
+            const rowData = $(this).data();
+            console.log('Processing row:', rowData);
             invoiceLines.push({
-                order_line_id: $(this).data('order-line-id') || null,
-                raw_material: $(this).find('.raw-material-select').val(),
+                raw_material: rowData.rawMaterialId,
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('.price-input').val(),
-                cost_amount: $(this).find('.cost-amount').text(),
-                vat_amount: $(this).find('.vat-amount').text()
             });
         });
+        console.log('Prepared invoice lines:', invoiceLines);
         formData.append('invoice_lines', JSON.stringify(invoiceLines));
-    
-    
+        
         $.ajax({
             url: $(this).attr('action'),
             type: 'POST',
@@ -407,6 +416,8 @@ $(document).ready(function() {
             }
         });
     });
+    
+    
     
     
 });
