@@ -103,6 +103,7 @@ def get_purchase_order_lines(request):
         {
             'id': line.id,
             'raw_material': line.raw_material.name,
+            'raw_material_id': line.raw_material.id,  # Ensure this is included
             'quantity': line.quantity,
             'price_per_unit': str(line.price),
             'vat_rate': float(line.raw_material.get_vat_rate()),

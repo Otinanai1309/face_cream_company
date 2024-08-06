@@ -119,8 +119,8 @@ $(document).ready(function() {
                     const remainingQuantity = item.quantity - item.invoiced_quantity;
                     addInvoiceLine({
                         ...item,
-                        quantity: remainingQuantity,
-                        raw_material_id: item.raw_material // Ensure this is included in the API response
+                        quantity: parseFloat(remainingQuantity),
+                        raw_material_id: parseInt(item.raw_material_id)
                     });
                 });
                 calculateTotals();
@@ -132,18 +132,18 @@ $(document).ready(function() {
     
 
     function addInvoiceLine(item) {
-        console.log('Adding invoice line:', item);
+        console.log('Adding invoice line:', item); // Debug log
         const newRow = $('<tr>', {
             'data-order-line-id': item.id,
-            'data-raw-material-id': item.raw_material_id
+            'data-raw-material-id': parseInt(item.raw_material_id)
         });
         newRow.append($('<td>').text(item.raw_material));
         newRow.append($('<td>').append($('<input>', {
             type: 'number',
             name: 'quantity',
-            value: item.remaining_quantity,
+            value: parseFloat(item.remaining_quantity),
             min: 0,
-            max: item.remaining_quantity,
+            max: parseFloat(item.remaining_quantity),
             step: 0.01,
             class: 'quantity-input'
         })));
@@ -165,8 +165,9 @@ $(document).ready(function() {
         newRow.data('vat-rate', item.vat_rate);
         invoiceLinesBody.append(newRow);
         calculateLineTotals(newRow);
-        console.log('Added row:', newRow.data());
+        console.log('Added row:', newRow.data()); // Debug log
     }
+    
     
 
     function clearInvoiceLines() {
@@ -390,7 +391,7 @@ $(document).ready(function() {
             const rowData = $(this).data();
             console.log('Processing row:', rowData);
             invoiceLines.push({
-                raw_material: rowData.rawMaterialId,
+                raw_material: rowData.rawMaterialId, // Ensure this is the correct ID
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('.price-input').val(),
             });
