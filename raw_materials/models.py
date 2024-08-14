@@ -42,8 +42,10 @@ class PurchaseOrder(models.Model):
     state = models.CharField(max_length=20, choices=ORDER_STATES, default='pending')
     
     def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = str(uuid.uuid4())[:20]
+        if self.is_connected_to_order:
+            purchase_order = self.purchase_order_code
+            purchase_order.status = 'invoiced'
+            purchase_order.save()
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -101,18 +103,13 @@ class PurchaseInvoice(models.Model):
         return f"Purchase Invoice #{self.code}"
     
 class PurchaseInvoiceLine(models.Model):
-    # foreign key referencing the parent PurchaseInvoice instance
     purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE)
-    
-    raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)  # name of the raw material
-    quantity = models.DecimalField(max_digits=10, decimal_places=2)  # quantity of the raw material
-    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)  # price per unit of the raw material
-    
-    cost_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # calculated cost (quantity * price)
-      
-    vat_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)  # calculated VAT amount
-    
-    
+    raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2)
+    price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    vat = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+
     @property
     def cost_amount(self):
         if self.quantity is not None and self.price_per_unit is not None:
@@ -121,11 +118,30 @@ class PurchaseInvoiceLine(models.Model):
 
     @property
     def vat_amount(self):
-        if self.cost_amount is not None and self.raw_material.vat_percentage is not None:
-            vat_rate = Decimal(self.raw_material.vat_percentage) / 100
-            return self.cost_amount * vat_rate
+        if self.cost_amount is not None:
+            return self.cost_amount * self.raw_material.get_vat_rate()
         return None
 
+    def update_invoice_lines(self):
+        for line in self.purchaseinvoiceline_set.all():
+            line.raw_material.stock += line.quantity
+            line.raw_material.save()
     
     def save(self, *args, **kwargs):
+        print(f"Before setting cost_amount: {self.cost_amount}")
+        # self.cost_amount = self.quantity * self.price_per_unit
+        
+        print(f"Before setting vat_amount: {self.vat_amount}")
+        # self.vat_amount = self.cost_amount * self.raw_material.get_vat_rate()
+        print(f"After setting vat_amount: {self.vat_amount}")
+        
+        print(f"Before updating raw_material stock: {self.raw_material.stock}")
+        self.raw_material.stock += self.quantity
+        print(f"After updating raw_material stock: {self.raw_material.stock}")
+        
+        self.raw_material.save()
+        print("Raw material saved")
+        
         super().save(*args, **kwargs)
+        print("PurchaseInvoiceLine saved")
+        

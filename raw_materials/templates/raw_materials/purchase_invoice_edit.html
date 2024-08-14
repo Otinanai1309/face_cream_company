@@ -17,12 +17,19 @@
             <label for="id_date_of_invoice">Date of Invoice:</label>
             <input type="date" id="id_date_of_invoice" name="date_of_invoice" value="{{ invoice.date_of_invoice|date:'Y-m-d' }}" required>
         </div>
+        <div class="form-row">
+            <label for="id_purchase_order_code">Purchase Order:</label>
+            <select id="id_purchase_order_code" name="purchase_order_code">
+                <option value="">No Purchase Order</option>
+                {% for po in purchase_orders %}
+                    <option value="{{ po.id }}" {% if po.id == invoice.purchase_order_code.id %}selected{% endif %}>{{ po.code }}</option>
+                {% endfor %}
+            </select>
+        </div>
     </div>
 
     <div class="form-section">
         <h3>Invoice Lines</h3>
-        <button type="button" id="add-line-button">Add Line</button>
-
         <table id="invoice-lines">
             <thead>
                 <tr>
@@ -37,10 +44,10 @@
             </thead>
             <tbody id="invoice-lines-body">
                 {% for line in invoice.purchaseinvoiceline_set.all %}
-                <tr>
+                <tr data-line-id="{{ line.id }}" data-order-line-id="{{ line.order_line_id }}">
                     <td>
-                        <select name="raw_material" class="raw-material-select">
-                            <option value="{{ line.raw_material.id }}">{{ line.raw_material.name }}</option>
+                        <select name="raw_material" class="raw-material-select" data-vat-rate="{{ line.raw_material.get_vat_rate }}">
+                            <option value="{{ line.raw_material.id }}" selected>{{ line.raw_material.name }}</option>
                         </select>
                     </td>
                     <td><input type="number" name="quantity" value="{{ line.quantity }}" class="quantity-input"></td>
@@ -53,6 +60,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        <button type="button" id="add-line-button">Add Line</button>
     </div>
 
     <div class="form-section">
@@ -65,357 +73,171 @@
     <button type="submit" id="submit-button">Update Invoice</button>
 </form>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
-// Include the same JavaScript as in purchase_invoice_create.html, 
-// but update the form submission URL to the edit URL
-$(document).ready(function() {
-  const connectionCheckbox = $('#id_connection_with_order');
-  const purchaseOrderRow = $('#purchase_order_row');
-  const purchaseOrderSelect = $('#id_purchase_order_code');
-  const invoiceLinesBody = $('#invoice-lines-body');
+    $(document).ready(function() {
+        console.log("Document ready, initializing purchase invoice edit form");
+        console.log("Initial Purchase Order ID:", $('#id_purchase_order_code').val());
 
-  connectionCheckbox.change(function() {
-      if (this.checked) {
-          purchaseOrderRow.show();
-          loadPendingPurchaseOrders();
-      } else {
-          purchaseOrderRow.hide();
-          purchaseOrderSelect.val('');
-          clearInvoiceLines();
-      }
-  });
+        function calculateLineTotals(row) {
+            console.log("Calculating line totals for row:", row);
+            var quantity = parseFloat(row.find('.quantity-input').val()) || 0;
+            var price = parseFloat(row.find('.price-input').val()) || 0;
+            var vatRate = parseFloat(row.find('.raw-material-select').data('vat-rate')) || 0;
+    
+            var costAmount = quantity * price;
+            var vatAmount = costAmount * vatRate;
+            var totalCost = costAmount + vatAmount;
+    
+            row.find('.cost-amount').text(costAmount.toFixed(2));
+            row.find('.vat-amount').text(vatAmount.toFixed(2));
+            row.find('.total-cost').text(totalCost.toFixed(2));
+    
+            console.log("Line totals calculated:", { costAmount, vatAmount, totalCost });
+            calculateTotals();
+            console.log("Updated line totals:", {
+                rawMaterial: row.find('.raw-material-select').val(),
+                quantity: row.find('.quantity-input').val(),
+                price: row.find('.price-input').val(),
+                costAmount: row.find('.cost-amount').text(),
+                vatAmount: row.find('.vat-amount').text(),
+                totalCost: row.find('.total-cost').text()
+            });
+        }
+    
+        function calculateTotals() {
+            console.log("Calculating overall totals");
+            var totalCost = 0;
+            var totalVAT = 0;
+            var grandTotal = 0;
+    
+            $('#invoice-lines-body tr').each(function() {
+                totalCost += parseFloat($(this).find('.cost-amount').text()) || 0;
+                totalVAT += parseFloat($(this).find('.vat-amount').text()) || 0;
+            });
+    
+            grandTotal = totalCost + totalVAT;
+    
+            $('#total-cost').text(totalCost.toFixed(2));
+            $('#total-vat').text(totalVAT.toFixed(2));
+            $('#grand-total').text(grandTotal.toFixed(2));
+    
+            console.log("Overall totals calculated:", { totalCost, totalVAT, grandTotal });
+        }
+    
+        $('#invoice-lines-body tr').each(function() {
+            calculateLineTotals($(this));
+        });
+    
+        $(document).on('input', '.quantity-input, .price-input', function() {
+            console.log("Quantity or price changed for line");
+            calculateLineTotals($(this).closest('tr'));
+        });
+    
+        $(document).on('change', '.raw-material-select', function() {
+            console.log("Raw material selection changed");
+            calculateLineTotals($(this).closest('tr'));
+        });
+        
+        $('#id_purchase_order_code').change(function() {
+            var purchaseOrderId = $(this).val();
+            if (purchaseOrderId) {
+                $.ajax({
+                    url: '/api/get-purchase-order-lines/',
+                    data: { purchase_order_id: purchaseOrderId },
+                    success: function(data) {
+                        $('#invoice-lines-body').empty();
+                        data.forEach(function(line) {
+                            var newRow = createInvoiceLine(line);
+                            $('#invoice-lines-body').append(newRow);
+                            calculateLineTotals(newRow);
+                        });
+                        updateInvoicedQuantities(purchaseOrderId);
+                    }
+                });
+            }
+        });
 
-  purchaseOrderSelect.change(function() {
-      if (this.value) {
-          loadPurchaseOrderLines(this.value);
-      } else {
-          clearInvoiceLines();
-      }
-  });
+        function getInvoiceLineData() {
+            var lineData = [];
+            $('#invoice-lines-body tr').each(function() {
+                lineData.push({
+                    order_line_id: $(this).data('order-line-id'),
+                    quantity: $(this).find('.quantity-input').val()
+                });
+            });
+            return lineData;
+        }
 
-  function loadPendingPurchaseOrders() {
-      $.ajax({
-          url: "{% url 'get_purchase_orders' %}",
-          data: { 'supplier_id': $('#id_supplier').val() },
-          success: function(data) {
-              purchaseOrderSelect.empty();
-              purchaseOrderSelect.append($('<option>', {
-                  value: '',
-                  text: 'Select a Purchase Order'
-              }));
-              $.each(data, function(index, item) {
-                  purchaseOrderSelect.append($('<option>', {
-                      value: item.id,
-                      text: item.code
-                  }));
-              });
-          }
-      });
-  }
+        function updateInvoicedQuantities(purchaseOrderId) {
+            $.ajax({
+                url: '/api/update-invoiced-quantities/',
+                method: 'POST',
+                data: JSON.stringify({ 
+                    purchase_order_id: purchaseOrderId,
+                    invoice_lines: getInvoiceLineData()
+                }),
+                contentType: 'application/json',
+                success: function(response) {
+                    console.log("Invoiced quantities updated:", response);
+                }
+            });
+        }
 
-  function loadPurchaseOrderLines(purchaseOrderId) {
-      $.ajax({
-          url: "{% url 'get_purchase_order_lines' %}",
-          data: { 'purchase_order_id': purchaseOrderId },
-          success: function(data) {
-              clearInvoiceLines();
-              $.each(data, function(index, item) {
-                  addInvoiceLine(item);
-              });
-              calculateTotals();
-          }
-      });
-  }
-
-  function addInvoiceLine(item) {
-      const newRow = $('<tr>', {
-          'data-order-line-id': item.id
-      });
-      newRow.append($('<td>').text(item.raw_material));
-      newRow.append($('<td>').append($('<input>', {
-          type: 'number',
-          name: 'quantity',
-          value: item.quantity,
-          min: 0,
-          max: item.quantity,
-          step: 0.01,
-          class: 'quantity-input'
-      })));
-      newRow.append($('<td>').text(item.price_per_unit));
-      newRow.append($('<td>').addClass('cost-amount'));
-      newRow.append($('<td>').addClass('vat-amount'));
-      newRow.append($('<td>').addClass('total-cost'));
-      newRow.append($('<td>').append($('<button>', {
-          type: 'button',
-          class: 'delete-line',
-          text: 'Delete',
-          css: {
-              'background-color': 'red',
-              'color': 'white'
-          }
-      })));
-      newRow.data('vat-rate', item.vat_rate);
-      invoiceLinesBody.append(newRow);
-  }
-  
-
-  function clearInvoiceLines() {
-      invoiceLinesBody.empty();
-  }
-
-  function calculateTotals() {
-      let totalCost = 0;
-      let totalVAT = 0;
-      $('#invoice-lines-body tr').each(function() {
-          totalCost += parseFloat($(this).find('.cost-amount').text()) || 0;
-          totalVAT += parseFloat($(this).find('.vat-amount').text()) || 0;
-      });
-  
-      $('#total-cost').text(totalCost.toFixed(2));
-      $('#total-vat').text(totalVAT.toFixed(2));
-      $('#grand-total').text((totalCost + totalVAT).toFixed(2));
-  }
-  
-
-  function addEmptyInvoiceLine() {
-      const newRow = $('<tr>');
-      newRow.append($('<td>').append(createRawMaterialSelect()));
-      newRow.append($('<td>').append($('<input>', {
-          type: 'number',
-          name: 'quantity',
-          min: 0,
-          step: 0.01,
-          class: 'quantity-input'
-      })));
-      newRow.append($('<td>').append($('<input>', {
-          type: 'number',
-          name: 'price_per_unit',
-          min: 0,
-          step: 0.01,
-          class: 'price-input'
-      })));
-      newRow.append($('<td>').addClass('cost-amount'));
-      newRow.append($('<td>').addClass('vat-amount'));
-      newRow.append($('<td>').addClass('total-cost'));
-      newRow.append($('<td>').append($('<button>', {
-          type: 'button',
-          class: 'delete-line',
-          text: 'Delete',
-          css: {
-              'background-color': 'red',
-              'color': 'white'
-          }
-      })));
-      invoiceLinesBody.append(newRow);
-      const newSelect = newRow.find('.raw-material-select');
-      updateRawMaterialOptions(newSelect);
-      newRow.data('vat-rate', 0); // Set initial VAT rate, update this when raw material is selected
-      calculateLineTotals(newRow);
-  }
-  
-  function createRawMaterialSelect() {
-      const select = $('<select>', {
-          name: 'raw_material',
-          class: 'raw-material-select'
-      });
-      // Populate with raw materials for the selected supplier
-      // You'll need to implement this part
-      return select;
-  }
-  
-  $('#add-line-button').click(addEmptyInvoiceLine);
-
-  $('#id_supplier').change(function() {
-      updateRawMaterialOptions();
-  });
-  
-  function updateRawMaterialOptions(newSelect = null) {
-      const supplierId = $('#id_supplier').val();
-      if (supplierId) {
-          $.ajax({
-              url: "{% url 'get_supplier_raw_materials' %}",
-              data: { 'supplier_id': supplierId },
-              success: function(data) {
-                  const selectsToUpdate = newSelect ? $(newSelect) : $('.raw-material-select:not(:has(option))');
-                  selectsToUpdate.each(function() {
-                      const select = $(this);
-                      select.empty();
-                      select.append($('<option>', {
-                          value: '',
-                          text: 'Select a Raw Material'
-                      }));
-                      $.each(data, function(index, item) {
-                          select.append($('<option>', {
-                              value: item.id,
-                              text: item.name,
-                              'data-vat-rate': item.vat_rate
-                          }));
-                      });
-                  });
-              }
-          });
-      }
-  }
-  
-
-  function updatePrice(rawMaterialSelect) {
-      var rawMaterialId = $(rawMaterialSelect).val();
-      if (rawMaterialId) {
-          $.ajax({
-              url: "{% url 'get_raw_material_price' %}",
-              data: {
-                  'raw_material_id': rawMaterialId
-              },
-              success: function(data) {
-                  var priceInput = $(rawMaterialSelect).closest('tr').find('.price-input');
-                  priceInput.val(data.price);
-                  priceInput.data('original-price', data.price);
-                  calculateLineTotals($(rawMaterialSelect).closest('tr'));
-              }
-          });
-      }
-  }
-  
-  function handlePriceChange(priceInput) {
-      var newPrice = $(priceInput).val();
-      var originalPrice = $(priceInput).data('original-price');
-      if (newPrice != originalPrice) {
-          if (confirm('The price has changed. Do you want to update the price in the database?')) {
-              var rawMaterialId = $(priceInput).closest('tr').find('.raw-material-select').val();
-              $.ajax({
-                  url: "{% url 'update_raw_material_price' %}",
-                  method: 'POST',
-                  data: {
-                      'raw_material_id': rawMaterialId,
-                      'new_price': newPrice,
-                      'csrfmiddlewaretoken': '{{ csrf_token }}'
-                  },
-                  success: function(response) {
-                      if (response.success) {
-                          alert('Price updated successfully in the database.');
-                          $(priceInput).data('original-price', newPrice);
-                      } else {
-                          alert('Failed to update price in the database.');
-                          $(priceInput).val(originalPrice);
-                      }
-                      calculateLineTotals($(priceInput).closest('tr'));
-                  }
-              });
-          } else {
-              $(priceInput).val(originalPrice);
-              calculateLineTotals($(priceInput).closest('tr'));
-          }
-      }
-  }
-
-  function calculateLineTotals(row) {
-      var quantity = parseFloat(row.find('.quantity-input').val()) || 0;
-  var price = parseFloat(row.find('.price-input').val()) || 0;
-  var vatRate = parseFloat(row.data('vat-rate')) || 0;
-  
-      var costAmount = quantity * price;
-      var vatAmount = costAmount * vatRate;
-      var totalCost = costAmount + vatAmount;
-  
-      row.find('.cost-amount').text(costAmount.toFixed(2));
-      row.find('.vat-amount').text(vatAmount.toFixed(2));
-      row.find('.total-cost').text(totalCost.toFixed(2));
-  
-      calculateTotals();
-  }
-  
-  function updateVatRate(select) {
-      var rawMaterialId = $(select).val();
-      if (rawMaterialId) {
-          $.ajax({
-              url: "{% url 'get_raw_material_vat_rate' %}",
-              data: { 'raw_material_id': rawMaterialId },
-              success: function(data) {
-                  $(select).closest('tr').data('vat-rate', data.vat_rate);
-                  calculateLineTotals($(select).closest('tr'));
-              }
-          });
-      }
-  }
-  
-  
-  // event listeners
-  $(document).on('input', '.quantity-input', function() {
-      calculateLineTotals($(this).closest('tr'));
-      calculateTotals();
-  });
-  $(document).on('click', '.delete-line', function() {
-      $(this).closest('tr').remove();
-      calculateTotals();
-  });
-
-  $(document).on('change', '.raw-material-select', function() {
-      const selectedOption = $(this).find('option:selected');
-      const vatRate = selectedOption.data('vat-rate');
-      $(this).closest('tr').data('vat-rate', vatRate);
-      updatePrice(this);
-      calculateLineTotals($(this).closest('tr'));
-  });
-  
-  
-  $(document).on('blur', '.price-input', function() {
-      handlePriceChange(this);
-  });
-  
-  $(document).on('input', '.quantity-input, .price-input', function() {
-      calculateLineTotals($(this).closest('tr'));
-  });
-
-  $(document).on('input', '.quantity-input, .price-input', function() {
-      calculateLineTotals($(this).closest('tr'));
-  });
-  
-  $('.raw-material-select').change(function() {
-      updatePrice(this);
-      calculateLineTotals($(this).closest('tr'));
-  });
-
-  $('#purchase-invoice-form').submit(function(e) {
-      e.preventDefault();
-      const formData = new FormData(this);
-      
-      // Add invoice lines data
-      const invoiceLines = [];
-      $('#invoice-lines-body tr').each(function() {
-          invoiceLines.push({
-              order_line_id: $(this).data('order-line-id') || null,
-              raw_material: $(this).find('.raw-material-select').val(),
-              quantity: $(this).find('.quantity-input').val(),
-              price_per_unit: $(this).find('.price-input').val(),
-              cost_amount: $(this).find('.cost-amount').text(),
-              vat_amount: $(this).find('.vat-amount').text()
-          });
-      });
-      formData.append('invoice_lines', JSON.stringify(invoiceLines));
-  
-  
-      $.ajax({
-          url: $(this).attr('action'),
-          type: 'POST',
-          data: formData,
-          processData: false,
-          contentType: false,
-          success: function(response) {
-              if (response.success) {
-                  window.location.href = response.redirect_url;
-              } else {
-                  alert('Error saving invoice: ' + JSON.stringify(response.errors));
-              }
-          },
-          error: function() {
-              alert('An error occurred while saving the invoice.');
-          }
-      });
-  });
-  
-  
-});
+        $('#invoice-lines-body tr').each(function(index) {
+            var $row = $(this);
+            console.log("Initializing row:", index + 1);
+            console.log("Raw Material:", $row.find('.raw-material-select').val());
+            console.log("Quantity:", $row.find('.quantity-input').val());
+            console.log("Price:", $row.find('.price-input').val());
+            calculateLineTotals($row);
+        });
+        
+        
+        $('#purchase-invoice-form').submit(function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const invoiceLines = [];
+            $('#invoice-lines-body tr').each(function() {
+                const row = $(this);
+                const lineData = {
+                    id: row.data('line-id'),
+                    raw_material_id: row.find('.raw-material-select').val(),
+                    quantity: row.find('.quantity-input').val(),
+                    price_per_unit: row.find('.price-input').val()
+                };
+                invoiceLines.push(lineData);
+            });
+            formData.append('invoice_lines', JSON.stringify(invoiceLines));
+        
+            $.ajax({
+                url: $(this).attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.success) {
+                        window.location.href = response.redirect_url;
+                    } else {
+                        alert('Error saving invoice: ' + JSON.stringify(response.errors));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    alert('An error occurred while saving the invoice.');
+                }
+            });
+        });
+        
+        
+        // Verify purchase order options
+        console.log("Available Purchase Order options:", $('#id_purchase_order_code option').map(function() {
+            return { value: this.value, text: this.text };
+        }).get());
+    });
+    
 </script>
+
 <style>
   .form-section {
       margin-bottom: 20px;

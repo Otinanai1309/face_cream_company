@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Confirm Delete</h2>
+<p>Are you sure you want to delete the purchase invoice "{{ object }}"?</p>
+<form method="post">
+    {% csrf_token %}
+    <input type="submit" value="Confirm">
+</form>
+<a href="{% url 'purchase_invoice_list' %}">Cancel</a>
+{% endblock %}

@@ -49,12 +49,48 @@ class PurchaseInvoiceForm(forms.ModelForm):
         model = PurchaseInvoice
         fields = ['code', 'supplier', 'purchase_order_code', 'date_of_invoice']
     
+    purchase_order_code = forms.ChoiceField(
+        choices=PurchaseOrder.objects.values_list('id', 'code'),
+        required=False,
+        label="Purchase Order"
+    )
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and hasattr(self.instance, 'supplier') and self.instance.supplier:
+            self.fields['purchase_order_code'].queryset = PurchaseOrder.objects.filter(
+                supplier=self.instance.supplier,
+                state__in=['pending', 'partial_pending']
+            )
+        else:
+            self.fields['purchase_order_code'].required = False
+            # self.fields['purchase_order_code'].queryset = PurchaseOrder.objects.none()
+
+    
+    """def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.fields['purchase_order_code'].queryset = PurchaseOrder.objects.filter(state__in=['pending', 'partial_pending'])
-        self.fields['purchase_order_code'].required = False
+        self.fields['purchase_order_code'].required = False"""
+
 
     def clean(self):
+        cleaned_data = super().clean()
+        purchase_order_code = self.data.get('purchase_order_code')
+        
+        if purchase_order_code:
+            try:
+                purchase_order = PurchaseOrder.objects.get(id=purchase_order_code)
+                cleaned_data['purchase_order_code'] = purchase_order  # Assign the PurchaseOrder instance
+                cleaned_data['is_connected_to_order'] = True
+            except PurchaseOrder.DoesNotExist:
+                raise forms.ValidationError("Invalid purchase order selected.")
+        else:
+            cleaned_data['is_connected_to_order'] = False
+            cleaned_data['purchase_order_code'] = None
+        
+        return cleaned_data
+    
+    """def clean(self):
         cleaned_data = super().clean()
         is_connected = cleaned_data.get('is_connected_to_order')
         purchase_order = cleaned_data.get('purchase_order_code')
@@ -64,7 +100,8 @@ class PurchaseInvoiceForm(forms.ModelForm):
         elif not is_connected:
             cleaned_data['purchase_order_code'] = None
         
-        return cleaned_data
+        print(f"Cleaned data in PurchaseInvoiceForm clean method: {cleaned_data}")
+        return cleaned_data"""
 
 
 class PurchaseInvoiceLineForm(forms.ModelForm):

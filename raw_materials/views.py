@@ -5,6 +5,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import PurchaseOrder, PurchaseOrderLine, PurchaseInvoice, PurchaseInvoiceLine
 from .models import Supplier, RawMaterial
@@ -14,6 +16,8 @@ from django.urls import reverse_lazy
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .serializers import SupplierSerializer, RawMaterialSerializer, PurchaseOrderSerializer, PurchaseOrderLineSerializer
 from django.forms import formset_factory
 from django.forms import inlineformset_factory
@@ -141,6 +145,71 @@ def update_order_statuses(purchase_order_id):
         line.save()
     order.state = 'completed' if all_fulfilled else 'partial_pending'
     order.save()
+    
+@csrf_exempt
+@require_POST
+@transaction.atomic
+def update_invoiced_quantities(request):
+    data = json.loads(request.body)
+    invoice_id = data.get('invoice_id')
+    new_invoice_lines = data.get('invoice_lines')
+
+    invoice = PurchaseInvoice.objects.get(id=invoice_id)
+
+    for new_line in new_invoice_lines:
+        old_line = PurchaseInvoiceLine.objects.get(id=new_line['id'])
+        quantity_difference = new_line['quantity'] - old_line.quantity
+
+        # Step 1: Update RawMaterial stock (always performed)
+        raw_material = old_line.raw_material
+        raw_material.stock -= quantity_difference
+        raw_material.save()
+
+        # Steps 2 and 3: Only if invoice is connected to an order
+        if invoice.purchase_order_code:
+            if old_line.purchase_order_line:
+                po_line = old_line.purchase_order_line
+                po_line.invoiced_quantity += quantity_difference
+                po_line.save()
+
+                # Update PurchaseOrderLine state
+                if po_line.invoiced_quantity >= po_line.quantity:
+                    po_line.state = 'fulfilled'
+                elif po_line.invoiced_quantity > 0:
+                    po_line.state = 'partial'
+                else:
+                    po_line.state = 'pending'
+                po_line.save()
+
+        # Update PurchaseInvoiceLine
+        old_line.quantity = new_line['quantity']
+        old_line.save()
+
+    # Update PurchaseOrder state if connected
+    if invoice.purchase_order_code:
+        purchase_order = invoice.purchase_order_code
+        all_lines_fulfilled = all(line.state == 'fulfilled' for line in purchase_order.purchaseorderline_set.all())
+        purchase_order.state = 'completed' if all_lines_fulfilled else 'partial_pending'
+        purchase_order.save()
+
+    return JsonResponse({'status': 'success'})
+  
+
+
+"""class UpdateInvoicedQuantitiesView(APIView):
+    def post(self, request):
+        # Get the purchase order ID and invoice lines from the request data
+        purchase_order_id = request.data.get('purchase_order_id')
+        invoice_lines = request.data.get('invoice_lines')
+
+        # Update the invoiced quantities for the purchase order
+        # You'll need to implement the logic for updating the quantities here
+        # For example, you might use a model method to update the quantities
+        purchase_order = PurchaseOrder.objects.get(id=purchase_order_id)
+        purchase_order.update_invoiced_quantities(invoice_lines)
+
+        # Return a success response
+        return Response({'message': 'Invoiced quantities updated successfully'})"""
        
 # @transaction.atomic
 def purchase_invoice_create(request):
@@ -251,9 +320,69 @@ class PurchaseInvoiceEditView(UpdateView):
     model = PurchaseInvoice
     form_class = PurchaseInvoiceForm
     template_name = 'raw_materials/purchase_invoice_edit.html'
-    
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['invoice'] = self.object
+        context['purchase_orders'] = PurchaseOrder.objects.filter(supplier=self.object.supplier)
+        return context
+
+    def form_valid(self, form):
+        try:
+            with transaction.atomic():
+                print("Starting form_valid method")
+                self.object = form.save(commit=False)
+                print("Form saved with commit=False")
+                self.object.purchase_order_code_id = self.request.POST.get('purchase_order_code')
+                print(f"Setting purchase_order_code_id to: {self.object.purchase_order_code_id}")
+                self.object.save()
+                print("Main invoice saved")
+
+                invoice_lines = json.loads(self.request.POST.get('invoice_lines', '[]'))
+                print(f"Invoice lines data: {invoice_lines}")
+                for line_data in invoice_lines:
+                    line_id = line_data.get('id')
+                    print(f"Processing line with id: {line_id}")
+                    if line_id:
+                        line = PurchaseInvoiceLine.objects.get(id=line_id, purchase_invoice=self.object)
+                        print(f"Found existing line: {line}")
+                        line.quantity = Decimal(line_data['quantity'])
+                        print(f"Setting quantity to: {line.quantity}")
+                        line.price_per_unit = Decimal(line_data['price_per_unit'])
+                        print(f"Setting price_per_unit to: {line.price_per_unit}")
+                        
+                        print(f"Raw material instance before setting: {line.raw_material}")
+                        line.raw_material_id = line_data['raw_material_id']
+                        print(f"Raw material instance after setting: {line.raw_material}")
+                        
+                        line.save()
+                        print("Existing line saved")
+                    else:
+                        new_line = PurchaseInvoiceLine.objects.create(
+                            purchase_invoice=self.object,
+                            raw_material_id=line_data['raw_material_id'],
+                            quantity=Decimal(line_data['quantity']),
+                            price_per_unit=Decimal(line_data['price_per_unit'])
+                        )
+                        print(f"Created new line: {new_line}")
+
+                print("All lines processed")
+                return JsonResponse({'success': True, 'redirect_url': self.get_success_url()})
+        except Exception as e:
+            print(f"Exception occurred: {e}")
+            return JsonResponse({'success': False, 'errors': str(e)})
+
+    def form_invalid(self, form):
+        print("Form is invalid. Entering form_invalid method.")
+        print(f"Form errors: {form.errors}")
+        print(f"Form data: {form.data}")
+        if 'invoice_lines' not in form.data:
+            print("invoice_lines field is missing from form data")
+        return JsonResponse({'success': False, 'errors': form.errors})
+
     def get_success_url(self):
-        return reverse_lazy('purchase_invoice_list')
+        # Redirect to the detail view of the edited purchase invoice
+        return reverse('purchase_invoice_detail', kwargs={'pk': self.object.pk})
 
 class PurchaseInvoiceDeleteView(DeleteView):
     model = PurchaseInvoice
