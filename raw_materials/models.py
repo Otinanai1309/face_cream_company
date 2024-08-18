@@ -109,6 +109,7 @@ class PurchaseInvoiceLine(models.Model):
     price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
     cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     vat = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    order_line = models.ForeignKey(PurchaseOrderLine, null=True, blank=True, on_delete=models.SET_NULL)
 
     @property
     def cost_amount(self):

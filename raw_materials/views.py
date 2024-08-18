@@ -316,6 +316,11 @@ class PurchaseInvoiceListView(ListView):
     template_name = 'raw_materials/purchase_invoice_list.html'
     context_object_name = 'invoices'
 
+
+from django.db import transaction
+from django.http import JsonResponse
+from decimal import Decimal
+
 class PurchaseInvoiceEditView(UpdateView):
     model = PurchaseInvoice
     form_class = PurchaseInvoiceForm
@@ -330,59 +335,81 @@ class PurchaseInvoiceEditView(UpdateView):
     def form_valid(self, form):
         try:
             with transaction.atomic():
-                print("Starting form_valid method")
                 self.object = form.save(commit=False)
-                print("Form saved with commit=False")
                 self.object.purchase_order_code_id = self.request.POST.get('purchase_order_code')
-                print(f"Setting purchase_order_code_id to: {self.object.purchase_order_code_id}")
                 self.object.save()
-                print("Main invoice saved")
 
                 invoice_lines = json.loads(self.request.POST.get('invoice_lines', '[]'))
-                print(f"Invoice lines data: {invoice_lines}")
+
                 for line_data in invoice_lines:
                     line_id = line_data.get('id')
-                    print(f"Processing line with id: {line_id}")
+                    new_quantity = Decimal(line_data['quantity'])
+                    raw_material_id = line_data['raw_material_id']
+                    price_per_unit = Decimal(line_data['price_per_unit'])
+                    order_line_id = line_data.get('order_line_id')  # Assuming this is sent from the form
+
+                    if not order_line_id and self.object.purchase_order_code:
+                        # Attempt to automatically link order line if not provided
+                        try:
+                            po_line = PurchaseOrderLine.objects.get(
+                                purchase_order=self.object.purchase_order_code,
+                                raw_material_id=raw_material_id
+                            )
+                            order_line_id = po_line.id
+                        except PurchaseOrderLine.DoesNotExist:
+                            order_line_id = None
+
                     if line_id:
                         line = PurchaseInvoiceLine.objects.get(id=line_id, purchase_invoice=self.object)
-                        print(f"Found existing line: {line}")
-                        line.quantity = Decimal(line_data['quantity'])
-                        print(f"Setting quantity to: {line.quantity}")
-                        line.price_per_unit = Decimal(line_data['price_per_unit'])
-                        print(f"Setting price_per_unit to: {line.price_per_unit}")
-                        
-                        print(f"Raw material instance before setting: {line.raw_material}")
-                        line.raw_material_id = line_data['raw_material_id']
-                        print(f"Raw material instance after setting: {line.raw_material}")
-                        
+                        old_quantity = line.quantity
+                        quantity_difference = new_quantity - old_quantity
+                        line.quantity = new_quantity
+                        line.price_per_unit = price_per_unit
+                        line.raw_material_id = raw_material_id
+                        line.order_line_id = order_line_id  # Set the order line linkage
                         line.save()
-                        print("Existing line saved")
                     else:
                         new_line = PurchaseInvoiceLine.objects.create(
                             purchase_invoice=self.object,
-                            raw_material_id=line_data['raw_material_id'],
-                            quantity=Decimal(line_data['quantity']),
-                            price_per_unit=Decimal(line_data['price_per_unit'])
+                            raw_material_id=raw_material_id,
+                            quantity=new_quantity,
+                            price_per_unit=price_per_unit,
+                            order_line_id=order_line_id  # Set the order line linkage
                         )
-                        print(f"Created new line: {new_line}")
+                        quantity_difference = new_quantity  # Since it's a new line
 
-                print("All lines processed")
+                    # Update stock
+                    raw_material = RawMaterial.objects.get(id=raw_material_id)
+                    raw_material.stock += quantity_difference
+                    raw_material.save()
+
+                    # Update related purchase order line, if exists
+                    if order_line_id:
+                        po_line = PurchaseOrderLine.objects.get(id=order_line_id)
+                        po_line.invoiced_quantity += quantity_difference
+
+                        # Update the order line's state
+                        if po_line.invoiced_quantity >= po_line.quantity:
+                            po_line.state = 'fully_invoiced'
+                        elif po_line.invoiced_quantity > 0:
+                            po_line.state = 'partially_invoiced'
+                        else:
+                            po_line.state = 'pending'
+                        po_line.save()
+
                 return JsonResponse({'success': True, 'redirect_url': self.get_success_url()})
+
         except Exception as e:
-            print(f"Exception occurred: {e}")
             return JsonResponse({'success': False, 'errors': str(e)})
 
+
+
     def form_invalid(self, form):
-        print("Form is invalid. Entering form_invalid method.")
-        print(f"Form errors: {form.errors}")
-        print(f"Form data: {form.data}")
-        if 'invoice_lines' not in form.data:
-            print("invoice_lines field is missing from form data")
         return JsonResponse({'success': False, 'errors': form.errors})
 
     def get_success_url(self):
-        # Redirect to the detail view of the edited purchase invoice
         return reverse('purchase_invoice_detail', kwargs={'pk': self.object.pk})
+
 
 class PurchaseInvoiceDeleteView(DeleteView):
     model = PurchaseInvoice
