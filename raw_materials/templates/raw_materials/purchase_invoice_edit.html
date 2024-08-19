@@ -204,12 +204,15 @@
                     id: row.data('line-id'),
                     raw_material_id: row.find('.raw-material-select').val(),
                     quantity: row.find('.quantity-input').val(),
-                    price_per_unit: row.find('.price-input').val()
+                    price_per_unit: row.find('.price-input').val(),
                     order_line_id: row.data('order-line-id')  // Include this to ensure the linkage
                 };
                 invoiceLines.push(lineData);
             });
             formData.append('invoice_lines', JSON.stringify(invoiceLines));
+        
+            console.log("Form Data:", formData);
+            console.log("Invoice Lines:", invoiceLines);
         
             $.ajax({
                 url: $(this).attr('action'),

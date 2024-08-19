@@ -107,11 +107,14 @@ class PurchaseInvoiceForm(forms.ModelForm):
 class PurchaseInvoiceLineForm(forms.ModelForm):
     class Meta:
         model = PurchaseInvoiceLine
-        fields = ['raw_material', 'quantity', 'price_per_unit']
+        fields = ['raw_material', 'quantity', 'price_per_unit', 'cost', 'vat', 'order_line']
         widgets = {
             'raw_material': forms.Select(attrs={'class': 'form-control'}),
             'quantity': forms.NumberInput(attrs={'class': 'form-control'}),
             'price_per_unit': forms.NumberInput(attrs={'class': 'form-control'}),
+            'cost': forms.NumberInput(attrs={'class': 'form-control'}),
+            'vat': forms.NumberInput(attrs={'class': 'form-control'}),
+            'order_line': forms.HiddenInput(),  # Assuming this is set dynamically
         }
 
     def __init__(self, *args, **kwargs):

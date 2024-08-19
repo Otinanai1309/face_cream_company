@@ -40,12 +40,15 @@ class PurchaseOrder(models.Model):
     date = models.DateField()
     estimated_delivery_date = models.DateField()
     state = models.CharField(max_length=20, choices=ORDER_STATES, default='pending')
-    
-    def save(self, *args, **kwargs):
-        if self.is_connected_to_order:
+            
+    """def save(self, *args, **kwargs):
+        if self.is_connected_to_order():
             purchase_order = self.purchase_order_code
             purchase_order.status = 'invoiced'
             purchase_order.save()
+        super().save(*args, **kwargs)"""
+        
+    def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -90,15 +93,49 @@ class PurchaseInvoice(models.Model):
     purchase_order_code = models.ForeignKey(PurchaseOrder, null=True, blank=True, on_delete=models.SET_NULL)
     date_of_invoice = models.DateField()
 
+    
     def save(self, *args, **kwargs):
+        is_new = self.pk is None  # Check if the instance is new (has no primary key)
+        if not is_new:
+            self.update_stock_on_update()  # Custom stock update logic for updates
         super().save(*args, **kwargs)
-        self.update_stock()
+        if is_new:
+            self.update_stock_on_create()  # Custom stock update logic for creations
 
-    def update_stock(self):
+    def is_connected_to_order(self):
+        # Check if the invoice is connected to an order
+        return self.purchase_order_code is not None
+    
+    def update_stock_on_create(self):
         for line in self.purchaseinvoiceline_set.all():
             line.raw_material.stock += line.quantity
             line.raw_material.save()
-            
+
+    def update_stock_on_update(self):
+        # Fetch the original invoice from the database
+        original_invoice = PurchaseInvoice.objects.get(pk=self.pk)
+        original_lines = original_invoice.purchaseinvoiceline_set.all()
+        updated_lines = self.purchaseinvoiceline_set.all()
+
+        # Create a dictionary to track changes in quantities
+        quantity_changes = {}
+
+        # Calculate the changes in quantities
+        for original_line in original_lines:
+            quantity_changes[original_line.raw_material.id] = -original_line.quantity
+
+        for updated_line in updated_lines:
+            if updated_line.raw_material.id in quantity_changes:
+                quantity_changes[updated_line.raw_material.id] += updated_line.quantity
+            else:
+                quantity_changes[updated_line.raw_material.id] = updated_line.quantity
+
+        # Apply the changes to the stock
+        for raw_material_id, quantity_change in quantity_changes.items():
+            raw_material = RawMaterial.objects.get(id=raw_material_id)
+            raw_material.stock += quantity_change
+            raw_material.save()
+
     def __str__(self):
         return f"Purchase Invoice #{self.code}"
     
@@ -129,20 +166,18 @@ class PurchaseInvoiceLine(models.Model):
             line.raw_material.save()
     
     def save(self, *args, **kwargs):
-        print(f"Before setting cost_amount: {self.cost_amount}")
-        # self.cost_amount = self.quantity * self.price_per_unit
-        
-        print(f"Before setting vat_amount: {self.vat_amount}")
-        # self.vat_amount = self.cost_amount * self.raw_material.get_vat_rate()
-        print(f"After setting vat_amount: {self.vat_amount}")
-        
         print(f"Before updating raw_material stock: {self.raw_material.stock}")
-        self.raw_material.stock += self.quantity
+        if self.pk:
+            original_line = PurchaseInvoiceLine.objects.get(pk=self.pk)
+            quantity_change = self.quantity - original_line.quantity
+            self.raw_material.stock += quantity_change
+            self.raw_material.save()
+
+            if self.order_line:
+                self.order_line.invoiced_quantity += quantity_change
+                self.order_line.save()
         print(f"After updating raw_material stock: {self.raw_material.stock}")
-        
-        self.raw_material.save()
-        print("Raw material saved")
-        
         super().save(*args, **kwargs)
+                
         print("PurchaseInvoiceLine saved")
         

@@ -32,7 +32,7 @@
     <div class="form-section">
         <h3>Invoice Lines</h3>
         <button type="button" id="add-line-button">Add Line</button>
-
+    
         <table id="invoice-lines">
             <thead>
                 <tr>
@@ -132,7 +132,6 @@ $(document).ready(function() {
     
 
     function addInvoiceLine(item) {
-        console.log('Adding invoice line:', item); // Debug log
         const newRow = $('<tr>', {
             'data-order-line-id': item.id,
             'data-raw-material-id': parseInt(item.raw_material_id)
@@ -165,7 +164,6 @@ $(document).ready(function() {
         newRow.data('vat-rate', item.vat_rate);
         invoiceLinesBody.append(newRow);
         calculateLineTotals(newRow);
-        console.log('Added row:', newRow.data()); // Debug log
     }
     
     
@@ -389,17 +387,15 @@ $(document).ready(function() {
         const invoiceLines = [];
         $('#invoice-lines-body tr').each(function() {
             const rowData = $(this).data();
-            console.log('Processing row:', rowData);
             invoiceLines.push({
-                raw_material: rowData.rawMaterialId, // Ensure this is the correct ID
+                raw_material: rowData.rawMaterialId,
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('.price-input').val(),
-                order_line_id: rowData.orderLineId
+                order_line: rowData.orderLineId
             });
         });
-        console.log('Prepared invoice lines:', invoiceLines);
         formData.append('invoice_lines', JSON.stringify(invoiceLines));
-        
+    
         $.ajax({
             url: $(this).attr('action'),
             type: 'POST',

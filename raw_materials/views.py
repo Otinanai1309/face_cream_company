@@ -25,7 +25,6 @@ from django.forms import inlineformset_factory
 from django.http import JsonResponse
 
 from decimal import Decimal
-import logging
 
 from django.db import IntegrityError
 from django.db import transaction
@@ -33,7 +32,7 @@ from django.db.models import Sum
 from django.core.exceptions import ValidationError
 
 from django.urls import reverse
-
+import logging
 logger = logging.getLogger(__name__)
 
 PurchaseOrderLineFormSet = inlineformset_factory(
@@ -214,73 +213,56 @@ def update_invoiced_quantities(request):
 # @transaction.atomic
 def purchase_invoice_create(request):
     if request.method == 'POST':
-        logger.info("Received POST request for purchase invoice creation")
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
-            logger.info("Form is valid")
             invoice = form.save(commit=False)
             purchase_order_id = request.POST.get('purchase_order_code')
-            logger.info(f"Purchase order ID: {purchase_order_id}")
             if purchase_order_id:
                 invoice.purchase_order_code_id = purchase_order_id
-            invoice.save()
-            logger.info(f"Invoice created with ID: {invoice.id}")
+            invoice.save()  # This will call update_stock if the instance is new
 
             invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
-            logger.info(f"Number of invoice lines: {len(invoice_lines)}")
-            logger.info(f"invoice lines: {invoice_lines}")
             for line_data in invoice_lines:
-                logger.debug(f"Processing line data: {line_data}")
                 raw_material_id = line_data.get('raw_material')
                 if raw_material_id:
-                    try:
-                        raw_material = RawMaterial.objects.get(id=raw_material_id)
-                        logger.info(f"Raw material: {raw_material}")
-                        quantity = Decimal(line_data['quantity'])
-                        
-                        invoice_line = PurchaseInvoiceLine.objects.create(
-                            purchase_invoice=invoice,
-                            raw_material=raw_material,
-                            quantity=quantity,
-                            price_per_unit=Decimal(line_data['price_per_unit'])
-                        )
-                        logger.info(f"Created invoice line: {invoice_line.id}")
-                    
-                        if purchase_order_id:
-                            order_line = PurchaseOrderLine.objects.get(
-                                id=line_data.get('order_line_id'),
-                                purchase_order_id=purchase_order_id,
-                                raw_material=raw_material
-                            )
-                            
-                            if order_line:
-                                order_line.invoiced_quantity += quantity
-                                order_line.save()
-                                logger.info(f"Updated order line: {order_line.id}")
-                    except RawMaterial.DoesNotExist:
-                        logger.error(f"Raw material with id {raw_material_id} does not exist")
-                        return JsonResponse({'success': False, 'errors': f'Raw material with id {raw_material_id} does not exist'})
-                    except PurchaseOrderLine.DoesNotExist:
-                        logger.error(f"Purchase order line not found for raw material {raw_material_id}")
-                        return JsonResponse({'success': False, 'errors': f'Purchase order line not found for raw material {raw_material_id}'})
+                    raw_material = RawMaterial.objects.get(id=raw_material_id)
+                    quantity = Decimal(line_data['quantity'])
+                    price_per_unit = Decimal(line_data['price_per_unit'])
+                    cost = quantity * price_per_unit
+                    vat = cost * raw_material.get_vat_rate()
+                    order_line_id = line_data.get('order_line')
 
-            invoice.update_stock()
-            logger.info("Updated raw material stock")
+                    order_line = None
+                    if purchase_order_id:
+                        order_line = PurchaseOrderLine.objects.get(id=order_line_id) if order_line_id else None
+
+                    invoice_line = PurchaseInvoiceLine.objects.create(
+                        purchase_invoice=invoice,
+                        raw_material=raw_material,
+                        quantity=quantity,
+                        price_per_unit=price_per_unit,
+                        cost=cost,
+                        vat=vat,
+                        order_line=order_line
+                    )
+
+                    if purchase_order_id and order_line:
+                        order_line.invoiced_quantity += quantity
+                        order_line.save()
+
+            # Remove this call to avoid double updating stock
+            # invoice.update_stock()
 
             if purchase_order_id:
-                logger.info(f"Updating order statuses for order: {purchase_order_id}")
                 update_order_statuses(purchase_order_id)
 
-            logger.info("Purchase invoice creation completed successfully")
             return JsonResponse({
                 'success': True,
                 'redirect_url': reverse('purchase_invoice_detail', kwargs={'pk': invoice.pk})
             })
         else:
-            logger.error(f"Form validation failed. Errors: {form.errors}")
             return JsonResponse({'success': False, 'errors': form.errors})
     else:
-        logger.info("Received GET request for purchase invoice creation")
         form = PurchaseInvoiceForm()
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
 
@@ -316,10 +298,10 @@ class PurchaseInvoiceListView(ListView):
     template_name = 'raw_materials/purchase_invoice_list.html'
     context_object_name = 'invoices'
 
-
+"""
 from django.db import transaction
 from django.http import JsonResponse
-from decimal import Decimal
+from decimal import Decimal"""
 
 class PurchaseInvoiceEditView(UpdateView):
     model = PurchaseInvoice
@@ -340,33 +322,24 @@ class PurchaseInvoiceEditView(UpdateView):
                 self.object.save()
 
                 invoice_lines = json.loads(self.request.POST.get('invoice_lines', '[]'))
+                logger.debug(f"Received invoice lines: {invoice_lines}")
 
                 for line_data in invoice_lines:
                     line_id = line_data.get('id')
                     new_quantity = Decimal(line_data['quantity'])
                     raw_material_id = line_data['raw_material_id']
                     price_per_unit = Decimal(line_data['price_per_unit'])
-                    order_line_id = line_data.get('order_line_id')  # Assuming this is sent from the form
-
-                    if not order_line_id and self.object.purchase_order_code:
-                        # Attempt to automatically link order line if not provided
-                        try:
-                            po_line = PurchaseOrderLine.objects.get(
-                                purchase_order=self.object.purchase_order_code,
-                                raw_material_id=raw_material_id
-                            )
-                            order_line_id = po_line.id
-                        except PurchaseOrderLine.DoesNotExist:
-                            order_line_id = None
+                    order_line_id = line_data.get('order_line_id')
 
                     if line_id:
                         line = PurchaseInvoiceLine.objects.get(id=line_id, purchase_invoice=self.object)
                         old_quantity = line.quantity
-                        quantity_difference = new_quantity - old_quantity
+                        quantity_change = new_quantity - old_quantity
+                        logger.debug(f"Updating line {line_id}: old_quantity={old_quantity}, new_quantity={new_quantity}, quantity_change={quantity_change}")
                         line.quantity = new_quantity
                         line.price_per_unit = price_per_unit
                         line.raw_material_id = raw_material_id
-                        line.order_line_id = order_line_id  # Set the order line linkage
+                        line.order_line_id = order_line_id
                         line.save()
                     else:
                         new_line = PurchaseInvoiceLine.objects.create(
@@ -374,35 +347,27 @@ class PurchaseInvoiceEditView(UpdateView):
                             raw_material_id=raw_material_id,
                             quantity=new_quantity,
                             price_per_unit=price_per_unit,
-                            order_line_id=order_line_id  # Set the order line linkage
+                            order_line_id=order_line_id
                         )
-                        quantity_difference = new_quantity  # Since it's a new line
+                        quantity_change = new_quantity
+                        logger.debug(f"Creating new line: new_quantity={new_quantity}, quantity_change={quantity_change}")
 
-                    # Update stock
                     raw_material = RawMaterial.objects.get(id=raw_material_id)
-                    raw_material.stock += quantity_difference
+                    raw_material.stock += quantity_change
+                    logger.debug(f"Updating raw material {raw_material_id}: old_stock={raw_material.stock - quantity_change}, new_stock={raw_material.stock}")
                     raw_material.save()
 
-                    # Update related purchase order line, if exists
                     if order_line_id:
-                        po_line = PurchaseOrderLine.objects.get(id=order_line_id)
-                        po_line.invoiced_quantity += quantity_difference
-
-                        # Update the order line's state
-                        if po_line.invoiced_quantity >= po_line.quantity:
-                            po_line.state = 'fully_invoiced'
-                        elif po_line.invoiced_quantity > 0:
-                            po_line.state = 'partially_invoiced'
-                        else:
-                            po_line.state = 'pending'
-                        po_line.save()
+                        order_line = PurchaseOrderLine.objects.get(id=order_line_id)
+                        order_line.invoiced_quantity += quantity_change
+                        logger.debug(f"Updating order line {order_line_id}: old_invoiced_quantity={order_line.invoiced_quantity - quantity_change}, new_invoiced_quantity={order_line.invoiced_quantity}")
+                        order_line.save()
 
                 return JsonResponse({'success': True, 'redirect_url': self.get_success_url()})
 
         except Exception as e:
+            logger.error(f"Error updating invoice: {e}")
             return JsonResponse({'success': False, 'errors': str(e)})
-
-
 
     def form_invalid(self, form):
         return JsonResponse({'success': False, 'errors': form.errors})
