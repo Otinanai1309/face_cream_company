@@ -324,6 +324,9 @@ class PurchaseInvoiceEditView(UpdateView):
                 invoice_lines = json.loads(self.request.POST.get('invoice_lines', '[]'))
                 logger.debug(f"Received invoice lines: {invoice_lines}")
 
+                # Dictionary to track changes in invoiced quantities
+                invoiced_quantity_changes = {}
+
                 for line_data in invoice_lines:
                     line_id = line_data.get('id')
                     new_quantity = Decimal(line_data['quantity'])
@@ -359,9 +362,14 @@ class PurchaseInvoiceEditView(UpdateView):
 
                     if order_line_id:
                         order_line = PurchaseOrderLine.objects.get(id=order_line_id)
-                        order_line.invoiced_quantity += quantity_change
-                        logger.debug(f"Updating order line {order_line_id}: old_invoiced_quantity={order_line.invoiced_quantity - quantity_change}, new_invoiced_quantity={order_line.invoiced_quantity}")
-                        order_line.save()
+                        invoiced_quantity_changes[order_line_id] = invoiced_quantity_changes.get(order_line_id, 0) + quantity_change
+
+                # Recalculate invoiced quantities and update order line states
+                for order_line_id, quantity_change in invoiced_quantity_changes.items():
+                    order_line = PurchaseOrderLine.objects.get(id=order_line_id)
+                    order_line.invoiced_quantity += quantity_change
+                    order_line.save()
+                    self.object.update_order_line_state(order_line)
 
                 return JsonResponse({'success': True, 'redirect_url': self.get_success_url()})
 

@@ -43,12 +43,7 @@ class PurchaseOrder(models.Model):
     estimated_delivery_date = models.DateField()
     state = models.CharField(max_length=20, choices=ORDER_STATES, default='pending')
             
-    """def save(self, *args, **kwargs):
-        if self.is_connected_to_order():
-            purchase_order = self.purchase_order_code
-            purchase_order.status = 'invoiced'
-            purchase_order.save()
-        super().save(*args, **kwargs)"""
+    
         
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
