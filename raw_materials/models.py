@@ -2,6 +2,8 @@ from django.db import models
 from decimal import Decimal
 import uuid
 
+from django.db.models import Sum
+
 class Supplier(models.Model):
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=100)
@@ -93,51 +95,81 @@ class PurchaseInvoice(models.Model):
     purchase_order_code = models.ForeignKey(PurchaseOrder, null=True, blank=True, on_delete=models.SET_NULL)
     date_of_invoice = models.DateField()
 
-    
     def save(self, *args, **kwargs):
         is_new = self.pk is None  # Check if the instance is new (has no primary key)
-        if not is_new:
-            self.update_stock_on_update()  # Custom stock update logic for updates
-        super().save(*args, **kwargs)
+        super().save(*args, **kwargs)  # Save the instance first
         if is_new:
             self.update_stock_on_create()  # Custom stock update logic for creations
+        else:
+            self.update_stock_on_update()  # Custom stock update logic for updates
 
     def is_connected_to_order(self):
-        # Check if the invoice is connected to an order
         return self.purchase_order_code is not None
     
     def update_stock_on_create(self):
         for line in self.purchaseinvoiceline_set.all():
             line.raw_material.stock += line.quantity
             line.raw_material.save()
+            if line.order_line:
+                line.order_line.invoiced_quantity += line.quantity
+                line.order_line.save()
+                self.update_order_line_state(line.order_line)
 
     def update_stock_on_update(self):
-        # Fetch the original invoice from the database
         original_invoice = PurchaseInvoice.objects.get(pk=self.pk)
         original_lines = original_invoice.purchaseinvoiceline_set.all()
         updated_lines = self.purchaseinvoiceline_set.all()
 
-        # Create a dictionary to track changes in quantities
-        quantity_changes = {}
-
-        # Calculate the changes in quantities
-        for original_line in original_lines:
-            quantity_changes[original_line.raw_material.id] = -original_line.quantity
-
-        for updated_line in updated_lines:
-            if updated_line.raw_material.id in quantity_changes:
-                quantity_changes[updated_line.raw_material.id] += updated_line.quantity
-            else:
-                quantity_changes[updated_line.raw_material.id] = updated_line.quantity
-
-        # Apply the changes to the stock
-        for raw_material_id, quantity_change in quantity_changes.items():
+        # Update stock based on changes
+        stock_changes = self.calculate_stock_changes(original_lines, updated_lines)
+        for raw_material_id, quantity_change in stock_changes.items():
             raw_material = RawMaterial.objects.get(id=raw_material_id)
             raw_material.stock += quantity_change
             raw_material.save()
 
+        # Recalculate invoiced quantities for all related order lines
+        affected_order_lines = set(line.order_line for line in updated_lines if line.order_line)
+
+        for order_line in affected_order_lines:
+            # Recompute invoiced quantity directly from the database
+            summed_invoiced_quantity = PurchaseInvoiceLine.objects.filter(order_line=order_line).aggregate(total_invoiced=Sum('quantity'))['total_invoiced'] or 0
+
+            print(f"Recalculating: Order Line ID: {order_line.id}, Summed Invoiced Quantity: {summed_invoiced_quantity}")
+            order_line.invoiced_quantity = summed_invoiced_quantity
+            order_line.save()
+
+            # Update the state based on the new invoiced quantity
+            self.update_order_line_state(order_line)
+
+    def update_order_line_state(self, order_line):
+        print(f"Order Line ID: {order_line.id}, Invoiced Quantity: {order_line.invoiced_quantity}, Order Quantity: {order_line.quantity}")
+        if order_line.invoiced_quantity >= order_line.quantity:
+            order_line.state = 'fulfilled'
+        elif order_line.invoiced_quantity > 0:
+            order_line.state = 'partial'
+        else:
+            order_line.state = 'pending'
+        order_line.save()
+        print(f"Updated State: {order_line.state}")
+
+
+
+    def calculate_stock_changes(self, original_lines, updated_lines):
+        """ Helper function to calculate stock changes based on original and updated lines. """
+        quantity_changes = {}
+
+        for original_line in original_lines:
+            quantity_changes[original_line.raw_material.id] = quantity_changes.get(original_line.raw_material.id, 0) - original_line.quantity
+
+        for updated_line in updated_lines:
+            quantity_changes[updated_line.raw_material.id] = quantity_changes.get(updated_line.raw_material.id, 0) + updated_line.quantity
+
+        return quantity_changes
+
+
     def __str__(self):
         return f"Purchase Invoice #{self.code}"
+
     
 class PurchaseInvoiceLine(models.Model):
     purchase_invoice = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE)
@@ -160,23 +192,7 @@ class PurchaseInvoiceLine(models.Model):
             return self.cost_amount * self.raw_material.get_vat_rate()
         return None
 
-    def update_invoice_lines(self):
-        for line in self.purchaseinvoiceline_set.all():
-            line.raw_material.stock += line.quantity
-            line.raw_material.save()
-    
     def save(self, *args, **kwargs):
-        print(f"Before updating raw_material stock: {self.raw_material.stock}")
-        if self.pk:
-            original_line = PurchaseInvoiceLine.objects.get(pk=self.pk)
-            quantity_change = self.quantity - original_line.quantity
-            self.raw_material.stock += quantity_change
-            self.raw_material.save()
-
-            if self.order_line:
-                self.order_line.invoiced_quantity += quantity_change
-                self.order_line.save()
-        print(f"After updating raw_material stock: {self.raw_material.stock}")
         super().save(*args, **kwargs)
                 
         print("PurchaseInvoiceLine saved")
