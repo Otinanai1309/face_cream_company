@@ -43,10 +43,18 @@ class PurchaseOrder(models.Model):
     estimated_delivery_date = models.DateField()
     state = models.CharField(max_length=20, choices=ORDER_STATES, default='pending')
             
-    
-        
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        
+    
+    def update_order_state(self):
+        all_lines_fulfilled = all(line.state == 'fulfilled' for line in self.purchaseorderline_set.all())
+        if all_lines_fulfilled:
+            self.state = 'completed'
+        else:
+            self.state = 'partial_pending' if any(line.state == 'partial' for line in self.purchaseorderline_set.all()) else 'pending'
+        self.save()
+        
 
     def __str__(self):
         return f"Order {self.code} by {self.supplier.name}"
@@ -146,6 +154,10 @@ class PurchaseInvoice(models.Model):
             order_line.state = 'pending'
         order_line.save()
         print(f"Updated State: {order_line.state}")
+        
+        # Update the main order state
+        if order_line.purchase_order:
+            order_line.purchase_order.update_order_state()
 
 
 

@@ -383,7 +383,6 @@ class PurchaseInvoiceEditView(UpdateView):
     def get_success_url(self):
         return reverse('purchase_invoice_detail', kwargs={'pk': self.object.pk})
 
-
 class PurchaseInvoiceDeleteView(DeleteView):
     model = PurchaseInvoice
     success_url = reverse_lazy('purchase_invoice_list')
