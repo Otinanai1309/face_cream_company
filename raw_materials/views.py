@@ -1,7 +1,7 @@
 # views.py
 import json
 from django import forms
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import render, get_object_or_404, redirect, HttpResponseRedirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
@@ -247,11 +247,11 @@ def purchase_invoice_create(request):
                     )
 
                     if purchase_order_id and order_line:
-                        order_line.invoiced_quantity += quantity
+                        # order_line.invoiced_quantity += quantity
                         order_line.save()
 
             # Remove this call to avoid double updating stock
-            # invoice.update_stock()
+            # invoice.update_stock_on_create()
 
             if purchase_order_id:
                 update_order_statuses(purchase_order_id)
@@ -387,6 +387,23 @@ class PurchaseInvoiceDeleteView(DeleteView):
     model = PurchaseInvoice
     success_url = reverse_lazy('purchase_invoice_list')
     template_name = 'raw_materials/purchase_invoice_confirm_delete.html'
+    
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        self.object.delete_invoice()
+        return HttpResponseRedirect(self.get_success_url())
+    
+class PurchaseInvoiceLineDeleteView(DeleteView):
+    model = PurchaseInvoiceLine
+
+    def get_success_url(self):
+        return reverse('purchase_invoice_detail', kwargs={'pk': self.object.purchase_invoice.pk})
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        invoice = self.object.purchase_invoice
+        invoice.delete_invoice_line(self.object.id)
+        return HttpResponseRedirect(self.get_success_url())
     
 class IndexView(TemplateView):
     template_name = "index.html"
