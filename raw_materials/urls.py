@@ -11,7 +11,7 @@ from rest_framework.routers import DefaultRouter
 from .views import SupplierViewSet, RawMaterialViewSet, PurchaseOrderViewSet, PurchaseOrderLineViewSet
 from .views import get_raw_materials, update_raw_material_price, get_raw_material_price, get_raw_material_vat_rate
 from .views import purchase_invoice_create, purchase_invoice_detail, purchase_invoice_add_line, get_purchase_orders, get_purchase_order_lines, get_supplier_raw_materials
-from .views import PurchaseInvoiceListView, PurchaseInvoiceEditView, PurchaseInvoiceDeleteView, PurchaseInvoiceLineDeleteView, update_invoiced_quantities
+from .views import PurchaseInvoiceListView, PurchaseInvoiceEditView, PurchaseInvoiceDeleteView, update_invoiced_quantities
 
 from django.views.generic import TemplateView
 from django.contrib import admin
@@ -65,6 +65,5 @@ urlpatterns = [
     path('purchase-invoice/', PurchaseInvoiceListView.as_view(), name='purchase_invoice_list'),
     path('purchase-invoice/<int:pk>/edit/', PurchaseInvoiceEditView.as_view(), name='purchase_invoice_edit'),
     path('purchase-invoice/<int:pk>/delete/', PurchaseInvoiceDeleteView.as_view(), name='purchase_invoice_delete'),
-    path('purchase-invoice-line/<int:pk>/delete/', PurchaseInvoiceLineDeleteView.as_view(), name='purchase_invoice_line_delete'),
     path('api/update-invoiced-quantities/', update_invoiced_quantities, name='update_invoiced_quantities'),
 ]

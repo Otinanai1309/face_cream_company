@@ -1,7 +1,7 @@
 # views.py
 import json
 from django import forms
-from django.shortcuts import render, get_object_or_404, redirect, HttpResponseRedirect
+from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.views.generic.edit import CreateView, UpdateView
 from django.views.generic import TemplateView
@@ -215,12 +215,18 @@ def purchase_invoice_create(request):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
+            # Save the invoice first
             invoice = form.save(commit=False)
+
+            # Handle purchase order code if provided
             purchase_order_id = request.POST.get('purchase_order_code')
             if purchase_order_id:
                 invoice.purchase_order_code_id = purchase_order_id
-            invoice.save()  # This will call update_stock if the instance is new
 
+            # Save the invoice so it has a valid ID
+            invoice.save()
+
+            # Now create the invoice lines
             invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
             for line_data in invoice_lines:
                 raw_material_id = line_data.get('raw_material')
@@ -236,7 +242,7 @@ def purchase_invoice_create(request):
                     if purchase_order_id:
                         order_line = PurchaseOrderLine.objects.get(id=order_line_id) if order_line_id else None
 
-                    invoice_line = PurchaseInvoiceLine.objects.create(
+                    PurchaseInvoiceLine.objects.create(
                         purchase_invoice=invoice,
                         raw_material=raw_material,
                         quantity=quantity,
@@ -246,13 +252,15 @@ def purchase_invoice_create(request):
                         order_line=order_line
                     )
 
-                    if purchase_order_id and order_line:
-                        # order_line.invoiced_quantity += quantity
-                        order_line.save()
+                    # Update invoiced quantity in the related order line, if applicable
+                    """if purchase_order_id and order_line:
+                        order_line.invoiced_quantity += quantity
+                        order_line.save()"""
 
-            # Remove this call to avoid double updating stock
-            # invoice.update_stock_on_create()
-
+            # Manually call update_stock_on_create here
+            invoice.update_stock_on_create()
+            
+            # Optionally update order statuses after everything else
             if purchase_order_id:
                 update_order_statuses(purchase_order_id)
 
@@ -265,6 +273,8 @@ def purchase_invoice_create(request):
     else:
         form = PurchaseInvoiceForm()
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
+
+
 
 def get_supplier_raw_materials(request):
     supplier_id = request.GET.get('supplier_id')
@@ -387,23 +397,6 @@ class PurchaseInvoiceDeleteView(DeleteView):
     model = PurchaseInvoice
     success_url = reverse_lazy('purchase_invoice_list')
     template_name = 'raw_materials/purchase_invoice_confirm_delete.html'
-    
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        self.object.delete_invoice()
-        return HttpResponseRedirect(self.get_success_url())
-    
-class PurchaseInvoiceLineDeleteView(DeleteView):
-    model = PurchaseInvoiceLine
-
-    def get_success_url(self):
-        return reverse('purchase_invoice_detail', kwargs={'pk': self.object.purchase_invoice.pk})
-
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        invoice = self.object.purchase_invoice
-        invoice.delete_invoice_line(self.object.id)
-        return HttpResponseRedirect(self.get_success_url())
     
 class IndexView(TemplateView):
     template_name = "index.html"
