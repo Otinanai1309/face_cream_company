@@ -103,12 +103,18 @@ class PurchaseInvoice(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None  # Check if the instance is new (has no primary key)
         super().save(*args, **kwargs)  # Save the instance first
-        if is_new:
-            print(f"update stock on create from save model is called for {self.code}")
-            self.update_stock_on_create()
-        else:
-            print(f"update stock on update from save model is called for {self.code}")
-            self.update_stock_on_update()  # Custom stock update logic for updates
+        print(f"invoice instance saved at model level")
+        if self.is_connected_to_order():
+            print("invoice connected to an order")
+            if is_new:
+                print(f"update stock on create from save model is called for {self.code}")
+                # self.update_stock_on_create()
+            else:
+                print(f"update stock on update from save model is called for {self.code}")
+                self.update_stock_on_update()  # Custom stock update logic for updates
+       
+            
+        
 
     def is_connected_to_order(self):
         return self.purchase_order_code is not None
@@ -154,6 +160,9 @@ class PurchaseInvoice(models.Model):
             # Update the state based on the new invoiced quantity
             self.update_order_line_state(order_line)
 
+            
+        
+        
     def update_order_line_state(self, order_line):
         print(f"Order Line ID: {order_line.id}, Invoiced Quantity: {order_line.invoiced_quantity}, Order Quantity: {order_line.quantity}")
         if order_line.invoiced_quantity >= order_line.quantity:
@@ -182,6 +191,18 @@ class PurchaseInvoice(models.Model):
             quantity_changes[updated_line.raw_material.id] = quantity_changes.get(updated_line.raw_material.id, 0) + updated_line.quantity
 
         return quantity_changes
+    
+    def update_stock_for_unbound_invoice(self):
+        if not self.is_connected_to_order():
+            lines = self.purchaseinvoiceline_set.all()
+            print(f"Lines associated with invoice {self.code}: {list(lines)}")
+            for line in lines:
+                print(f"inside update stock on create for {self.code}")
+                print(f"stock before update for line {line.order_line} is {line.raw_material.stock}")
+                line.raw_material.stock += line.quantity
+                print(f"stock after update for line {line.order_line} is {line.raw_material.stock}")
+                line.raw_material.save()
+                print(f"{line.raw_material} saved")
 
 
     def __str__(self):
@@ -210,7 +231,20 @@ class PurchaseInvoiceLine(models.Model):
         return None
 
     def save(self, *args, **kwargs):
+        # Calculate cost and VAT if not provided
+        if self.cost is None:
+            self.cost = self.cost_amount
+        if self.vat is None:
+            self.vat = self.vat_amount
+        
+        print("invoice line save activated for {self.id}")
+
+        is_new = self.pk is None
         super().save(*args, **kwargs)
-                
-        print("PurchaseInvoiceLine saved")
+        """if is_new and not self.purchase_invoice.is_connected_to_order():
+            self.raw_material.stock += self.quantity
+            self.raw_material.save()"""
+        
+
+    
         

@@ -215,55 +215,71 @@ def purchase_invoice_create(request):
     if request.method == 'POST':
         form = PurchaseInvoiceForm(request.POST)
         if form.is_valid():
-            # Save the invoice first
+            print("Form is valid, proceeding to save the invoice.")
+            # Save the invoice first without committing to the database
             invoice = form.save(commit=False)
 
             # Handle purchase order code if provided
             purchase_order_id = request.POST.get('purchase_order_code')
             if purchase_order_id:
+                print(f"Purchase order ID provided: {purchase_order_id}")
                 invoice.purchase_order_code_id = purchase_order_id
 
             # Save the invoice so it has a valid ID
             invoice.save()
+            print(f"Invoice saved with ID: {invoice.id}")
 
-            # Now create the invoice lines
-            invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
-            for line_data in invoice_lines:
-                raw_material_id = line_data.get('raw_material')
-                if raw_material_id:
-                    raw_material = RawMaterial.objects.get(id=raw_material_id)
-                    quantity = Decimal(line_data['quantity'])
-                    price_per_unit = Decimal(line_data['price_per_unit'])
-                    cost = quantity * price_per_unit
-                    vat = cost * raw_material.get_vat_rate()
-                    order_line_id = line_data.get('order_line')
+            if invoice.is_connected_to_order():
+                # If connected to an order, create lines and update stock/order statuses
+                invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
+                print(f"invoice lines json: {invoice_lines}")
+                for line_data in invoice_lines:
+                    raw_material_id = line_data.get('raw_material')
+                    print(f"raw material id: {raw_material_id}")
+                    if raw_material_id:
+                        print(f"Processing invoice line for raw material ID: {raw_material_id}")
+                        raw_material = RawMaterial.objects.get(id=raw_material_id)
+                        print(f"raw_material: {raw_material}")
+                        quantity = Decimal(line_data['quantity'])
+                        price_per_unit = Decimal(line_data['price_per_unit'])
+                        cost = quantity * price_per_unit
+                        vat = cost * raw_material.get_vat_rate()
+                        order_line_id = line_data.get('order_line')
 
-                    order_line = None
-                    if purchase_order_id:
-                        order_line = PurchaseOrderLine.objects.get(id=order_line_id) if order_line_id else None
+                        order_line = None
+                        if order_line_id:
+                            order_line = PurchaseOrderLine.objects.get(id=order_line_id) if order_line_id else None
 
-                    PurchaseInvoiceLine.objects.create(
-                        purchase_invoice=invoice,
-                        raw_material=raw_material,
-                        quantity=quantity,
-                        price_per_unit=price_per_unit,
-                        cost=cost,
-                        vat=vat,
-                        order_line=order_line
-                    )
+                        invoice_line = PurchaseInvoiceLine.objects.create(
+                            purchase_invoice=invoice,
+                            raw_material=raw_material,
+                            quantity=quantity,
+                            price_per_unit=price_per_unit,
+                            cost=cost,
+                            vat=vat,
+                            order_line=order_line
+                        )
+                        print(f"Invoice line created for raw material ID: {raw_material_id}")
 
-                    # Update invoiced quantity in the related order line, if applicable
-                    """if purchase_order_id and order_line:
-                        order_line.invoiced_quantity += quantity
-                        order_line.save()"""
+                        """if purchase_order_id and order_line:
+                            order_line.invoiced_quantity += quantity
+                            order_line.save()"""
+                        
+                # Update stock and order statuses
+                invoice.update_stock_on_create()
+                print(f"update_stock_on_create called for invoice ID: {invoice.id}")
 
-            # Manually call update_stock_on_create here
-            invoice.update_stock_on_create()
-            
-            # Optionally update order statuses after everything else
-            if purchase_order_id:
                 update_order_statuses(purchase_order_id)
+                print(f"Order statuses updated for purchase order ID: {purchase_order_id}")
 
+            else:
+                # If not connected to an order, process lines and update stock without order links
+                print("Invoice is not connected to an order.")
+                process_invoice_lines(request, invoice)
+                invoice.update_stock_for_unbound_invoice()
+                print(f"Stock updated for unbound invoice ID: {invoice.id}")
+
+            # Return a successful JSON response
             return JsonResponse({
                 'success': True,
                 'redirect_url': reverse('purchase_invoice_detail', kwargs={'pk': invoice.pk})
@@ -274,7 +290,88 @@ def purchase_invoice_create(request):
         form = PurchaseInvoiceForm()
     return render(request, 'raw_materials/purchase_invoice_create.html', {'form': form})
 
+            
 
+            
+ 
+def process_invoice_lines(request, invoice):
+    print(f"Processing invoice lines for invoice ID: {invoice.id}")
+    invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
+    print(f"Received invoice lines data: {invoice_lines}")
+    if not invoice_lines:
+        print(f"No invoice lines provided for invoice {invoice.id}")
+        return
+    
+    for line_data in invoice_lines:
+        raw_material_id = line_data.get('raw_material')
+        if raw_material_id and RawMaterial.objects.filter(id=raw_material_id).exists():
+            print(f"Processing invoice line for raw material ID: {raw_material_id}")
+            raw_material = RawMaterial.objects.get(id=raw_material_id)
+            quantity = Decimal(line_data['quantity'])
+            price_per_unit = Decimal(line_data['price_per_unit'])
+            cost = quantity * price_per_unit
+            vat = cost * raw_material.get_vat_rate()
+
+            # Create and save the PurchaseInvoiceLine
+            PurchaseInvoiceLine.objects.create(
+                purchase_invoice=invoice,
+                raw_material=raw_material,
+                quantity=quantity,
+                price_per_unit=price_per_unit,
+                cost=cost,
+                vat=vat,
+            )
+            print(f"Invoice line created for raw material ID: {raw_material_id}")
+        else:
+            print(f"Invalid or missing raw material ID: {raw_material_id}")
+
+
+def update_invoice_without_order(request, pk):
+    invoice = get_object_or_404(PurchaseInvoice, pk=pk)
+
+    if request.method == 'POST':
+        form = PurchaseInvoiceForm(request.POST, instance=invoice)
+        if form.is_valid():
+            # Save updated invoice
+            invoice = form.save()
+
+            # Process invoice lines (you might want to handle updates here)
+            invoice_lines = json.loads(request.POST.get('invoice_lines', '[]'))
+
+            # Clear existing lines and re-create them (simple approach)
+            PurchaseInvoiceLine.objects.filter(purchase_invoice=invoice).delete()
+
+            for line_data in invoice_lines:
+                raw_material_id = line_data.get('raw_material')
+                if raw_material_id:
+                    raw_material = RawMaterial.objects.get(id=raw_material_id)
+                    quantity = Decimal(line_data['quantity'])
+                    price_per_unit = Decimal(line_data['price_per_unit'])
+                    cost = quantity * price_per_unit
+                    vat = cost * raw_material.get_vat_rate()
+
+                    # Create and save the PurchaseInvoiceLine
+                    PurchaseInvoiceLine.objects.create(
+                        purchase_invoice=invoice,
+                        raw_material=raw_material,
+                        quantity=quantity,
+                        price_per_unit=price_per_unit,
+                        cost=cost,
+                        vat=vat,
+                    )
+
+            # Update stock after lines are saved
+            invoice.update_stock_on_update()
+
+            return JsonResponse({
+                'success': True,
+                'redirect_url': reverse('purchase_invoice_detail', kwargs={'pk': invoice.pk})
+            })
+        else:
+            return JsonResponse({'success': False, 'errors': form.errors})
+    else:
+        form = PurchaseInvoiceForm(instance=invoice)
+    return render(request, 'raw_materials/purchase_invoice_edit.html', {'form': form})
 
 def get_supplier_raw_materials(request):
     supplier_id = request.GET.get('supplier_id')

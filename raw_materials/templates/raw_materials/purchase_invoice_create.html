@@ -388,7 +388,9 @@ $(document).ready(function() {
         $('#invoice-lines-body tr').each(function() {
             const rowData = $(this).data();
             invoiceLines.push({
-                raw_material: rowData.rawMaterialId,
+                // raw_material: rowData.rawMaterialId,
+                // raw_material: $(this).find('.raw-material-select').val(),
+                raw_material: rowData.rawMaterialId || $(this).find('.raw-material-select').val(),
                 quantity: $(this).find('.quantity-input').val(),
                 price_per_unit: $(this).find('.price-input').val(),
                 order_line: rowData.orderLineId
